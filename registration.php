@@ -1,3 +1,81 @@
+<?php
+session_start();
+require_once 'db.php'; 
+
+$pdo = connect_db();
+
+if (!defined('OFFICIAL_DOMAIN')) {
+    die("Configuration Error: Role constants are missing.");
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $full_name = trim($_POST['full_name']); 
+    $email = trim($_POST['email']);
+    $password = $_POST['password']; 
+
+    // Basic Validation
+    if (empty($full_name) || empty($email) || empty($password)) {
+
+        $_SESSION['register_message'] = "Error: Please fill all required fields.";
+        $_SESSION['register_type'] = "error";
+        header("Location: registration.php");
+        exit();
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $_SESSION['register_message'] = "Error: Invalid email format.";
+        $_SESSION['register_type'] = "error";
+        header("Location: registration.php");
+        exit();
+    }
+
+    $password_hash = password_hash($password, PASSWORD_DEFAULT);
+    $email_lower = strtolower($email);
+    $assigned_role = 'unassigned';
+
+    if (str_ends_with($email_lower, OFFICIAL_DOMAIN)) {
+        
+        $local_part = strstr($email_lower, '@', true);
+
+        if (strpos($local_part, HEAD_IDENTIFIER) !== false) {
+            $assigned_role = 'head';
+        } elseif (strpos($local_part, STAFF_IDENTIFIER) !== false) {
+            $assigned_role = 'staff';
+        } else {
+            // Email from official domain but no special identifier = assign as staff
+            $assigned_role = 'staff';
+        }
+    }
+
+    $sql = "INSERT INTO users (full_name, email, password_hash, role) VALUES (?, ?, ?, ?)";
+    $stmt = $pdo->prepare($sql);
+
+    try {
+        $stmt->execute([$full_name, $email, $password_hash, $assigned_role]);
+        
+        if ($assigned_role === 'unassigned') {
+            $_SESSION['register_message'] = "Registration Successful! Your account is pending role assignment.";
+        } else {
+            $_SESSION['register_message'] = "Registration Successful! Your role has been automatically set as **" . strtoupper($assigned_role) . "**.";
+        }
+        $_SESSION['register_type'] = "success";
+        
+        // Redirect to prevent form resubmission
+        header("Location: registration.php");
+        exit();
+
+    } catch (PDOException $e) {
+        if ($e->getCode() == 23000) { 
+            $_SESSION['register_message'] = "Error: This email is already registered.";
+        } else {
+            $_SESSION['register_message'] = "Registration failed: " . $e->getMessage();
+        }
+        $_SESSION['register_type'] = "error";
+        header("Location: registration.php");
+        exit();
+    }
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -167,11 +245,12 @@
     }
 
     .message {
-        padding: 10px;
-        margin-bottom: 15px;
+        padding: 12px;
+        margin-bottom: 20px;
         border-radius: 5px;
         text-align: center;
         font-weight: bold;
+        font-size: 0.9rem;
     }
 
     .error {
@@ -233,14 +312,25 @@
             <div class="form-content"> 
                 <h2>Create an Account</h2>
                 
+                <?php
+                if (isset($_SESSION['register_message'])) {
+                    $type = ($_SESSION['register_type'] == 'success') ? 'success' : 'error';
+                    echo '<div class="message ' . $type . '">';
+                    echo htmlspecialchars($_SESSION['register_message']);
+                    echo '</div>';
+                    unset($_SESSION['register_message']);
+                    unset($_SESSION['register_type']);
+                }
+                ?>
+                
                 <form action="registration.php" method="POST"> 
                     <div class="form-group">
-                        <label for="username">USERNAME <span class="text-danger">*</span></label>
+                        <label for="full_name">FULL NAME <span class="text-danger">*</span></label>
                         <div class="input-with-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.685 10.567 10 8 10s-3.516.685-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"/>
                             </svg>
-                            <input type="text" id="username" name="username" placeholder="Type your username" required>
+                            <input type="text" id="full_name" name="full_name" placeholder="Type your full name" required>
                         </div>
                     </div>
                     

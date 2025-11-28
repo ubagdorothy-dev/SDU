@@ -1,3 +1,54 @@
+<?php
+session_start();
+require_once 'db.php'; 
+
+$pdo = connect_db();
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $email = trim($_POST['email']);
+    $password = $_POST['password'];
+
+    $sql = "SELECT user_id, password_hash, role, full_name FROM users WHERE email = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$email]);
+    $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($user_data) {
+        $stored_hash = trim($user_data['password_hash']);
+
+        if (password_verify($password, $stored_hash)) {
+            // LOGIN SUCCESSFUL
+            $_SESSION['user_id'] = $user_data['user_id'];
+            $_SESSION['full_name'] = $user_data['full_name'];
+            $_SESSION['role'] = $user_data['role'];
+
+            // Role-based redirection
+            switch ($user_data['role']) {
+                case 'unit director': 
+                    header("Location: admin_dashboard.php");
+                    exit();
+                case 'head':
+                    header("Location: office_head_dashboard.php");
+                    exit();
+                case 'staff':
+                    header("Location: staff_dashboard.php");
+                    exit();
+                case 'unassigned':
+                    $_SESSION['login_error'] = "Your account is awaiting role assignment.";
+                    break;
+                default:
+                    $_SESSION['login_error'] = "Unknown account role. Contact administrator.";
+                    break;
+            }
+        } else {
+            $_SESSION['login_error'] = "Invalid password.";
+        }
+    } else {
+        $_SESSION['login_error'] = "No account found with this email.";
+    }
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,7 +105,7 @@
     }
 
     .login-left h1 {
-        font-size: 2rem;
+        font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 10px;
         text-align: center; 
@@ -207,12 +258,22 @@
      <div class="login-container">
         <div class="login-left">
             <img src="SDU_Logo.png" alt="SDU Logo" class="login-logo">
-            <h1>SOCIAL DEVELOPMENT UNIT STAFF CAPACITY BUILDING</h1>
+            <h1>Social Development Unit Staff Capacity Building Management System</h1>
         </div>
 
         <div class="login-right">
             <div class="login-form-box">
                 <h2>Sign In</h2>
+
+                <?php 
+                // Display error message if login failed
+                if (isset($_SESSION['login_error'])) {
+                    echo '<div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9rem;">';
+                    echo htmlspecialchars($_SESSION['login_error']);
+                    echo '</div>';
+                    unset($_SESSION['login_error']);
+                }
+                ?>
 
                 <form id="loginForm" method="post" action="login.php">
                     <div class="form-group">
