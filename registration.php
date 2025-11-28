@@ -135,7 +135,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     .registration-left h1 {
-        font-size: 2rem;
+        font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 10px;
         text-align: center; 
@@ -365,7 +365,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <div class="registration-left">
             <img src="SDU_Logo.png" alt="SDU Logo" class="register-logo">
-            <h1>SOCIAL DEVELOPMENT UNIT STAFF CAPACITY BUILDING</h1>
+            <h1>Social Development Unit Staff Capacity Building Management System</h1>
         </div>
     </div>
 </body>
