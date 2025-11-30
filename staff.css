@@ -182,6 +182,10 @@
             --card-color: #f59e0b;
             --card-color-light: #fbbf24;
         }
+          .stats-cards .card:nth-child(3) { 
+            --card-color: #31d0e6;
+            --card-color-light: #16c6e6;
+        }
         .quick-actions {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));

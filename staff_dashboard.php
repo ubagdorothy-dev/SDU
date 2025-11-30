@@ -15,6 +15,35 @@ $view = $_GET['view'] ?? 'overview';
 $staff_user_id = $_SESSION['user_id'];
 $staff_username = $_SESSION['full_name'] ?? ($_SESSION['email'] ?? 'Staff');
 
+// Attempt to fetch the staff member's office code and name (if available).
+$office_code = null;
+$office_name = null;
+try {
+    $oc = $pdo->prepare("SELECT office_code FROM users WHERE user_id = ? LIMIT 1");
+    $oc->execute([$staff_user_id]);
+    $office_code = $oc->fetchColumn();
+    if ($office_code) {
+        // Try to resolve office name from an `offices` table if it exists
+        try {
+            $on = $pdo->prepare("SELECT name FROM offices WHERE code = ? LIMIT 1");
+            $on->execute([$office_code]);
+            $office_name = $on->fetchColumn();
+        } catch (Exception $e) {
+            // offices table may not exist; ignore and fall back to code only
+            $office_name = null;
+        }
+    }
+} catch (Exception $e) {
+    // ignore lookup errors; leave office variables null
+}
+
+$office_display = '';
+if (!empty($office_name) && !empty($office_code)) {
+    $office_display = $office_name . ' (' . $office_code . ')';
+} elseif (!empty($office_code)) {
+    $office_display = $office_code;
+}
+
 // Auto-complete trainings where end_date has passed
 try {
     $toCompleteStmt = $pdo->prepare("SELECT id, title, office_code FROM training_records WHERE end_date < CURDATE() AND status != 'completed'");
@@ -48,12 +77,23 @@ $stmt = $pdo->prepare("SELECT COUNT(*) as c FROM training_records WHERE user_id 
 $stmt->execute([$staff_user_id]);
 $trainings_completed = $stmt->fetchColumn() ?: 0;
 
-$stmt2 = $pdo->prepare("SELECT COUNT(*) as c FROM training_records WHERE user_id = ? AND status != 'completed'");
+// Ongoing: current date between start and end (and not marked completed)
+$stmt_ongoing = $pdo->prepare("SELECT COUNT(*) as c FROM training_records WHERE user_id = ? AND status = 'ongoing'");
+$stmt_ongoing->execute([$staff_user_id]);
+$trainings_ongoing = $stmt_ongoing->fetchColumn() ?: 0;
+
+// Upcoming: future trainings (start date > today) and not completed
+$stmt2 = $pdo->prepare("SELECT COUNT(*) as c FROM training_records WHERE user_id = ? AND status = 'upcoming'");
 $stmt2->execute([$staff_user_id]);
 $trainings_upcoming = $stmt2->fetchColumn() ?: 0;
 
-// Upcoming trainings (for overview list)
-$upcoming_stmt = $pdo->prepare("SELECT id, title, start_date, end_date, status, nature, scope FROM training_records WHERE user_id = ? AND status != 'completed' ORDER BY start_date ASC LIMIT 10");
+// Ongoing trainings (for overview list)
+$ongoing_stmt = $pdo->prepare("SELECT id, title, start_date, end_date, status, nature, scope FROM training_records WHERE user_id = ? AND status = 'ongoing' ORDER BY start_date ASC LIMIT 10");
+$ongoing_stmt->execute([$staff_user_id]);
+$ongoing_rows = $ongoing_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Upcoming trainings (for overview list) - future only
+$upcoming_stmt = $pdo->prepare("SELECT id, title, start_date, end_date, status, nature, scope FROM training_records WHERE user_id = ? AND status = 'upcoming' ORDER BY start_date ASC LIMIT 10");
 $upcoming_stmt->execute([$staff_user_id]);
 // fetch into array for PDO (avoid mysqli-style num_rows/fetch_assoc)
 $upcoming_rows = $upcoming_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -161,7 +201,9 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                     <div>
                         <h1 class="text-dark fw-bold mb-2">Welcome, <?php echo htmlspecialchars($staff_username); ?>!</h1>
-                        <p class="mb-0" style="color: #6b7280;">Manage your training records and track your progress.</p>
+                        <?php if (!empty($office_display)): ?>
+                            <p class="mb-1 text-muted small"><?php echo htmlspecialchars($office_display); ?></p>
+                        <?php endif; ?>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#profileModal" onclick="initProfileModal('view')">
@@ -179,6 +221,10 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                 <div class="card">
                     <h3>Trainings Completed</h3>
                     <p><?php echo $trainings_completed; ?></p>
+                </div>
+                <div class="card">
+                    <h3>Ongoing Trainings</h3>
+                    <p><?php echo $trainings_ongoing; ?></p>
                 </div>
                 <div class="card">
                     <h3>Upcoming Trainings</h3>
@@ -204,6 +250,33 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                     <p>Review your records instantly</p>
                 </div>
             </div>
+            
+             <?php if (!empty($ongoing_rows)): ?>
+            <div class="content-box mt-4">
+                <h2>Ongoing Trainings</h2>
+                <div class="list-group">
+                    <?php foreach ($ongoing_rows as $ongoing): ?>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><?php echo htmlspecialchars($ongoing['title']); ?></h6>
+                                <small class="text-muted">In progress: <?php echo date('M d, Y', strtotime($ongoing['start_date'])); ?> — <?php echo date('M d, Y', strtotime($ongoing['end_date'])); ?></small>
+                                <?php if (!empty($ongoing['nature']) || !empty($ongoing['scope'])): ?>
+                                    <small class="d-block mt-1">
+                                        <?php if (!empty($ongoing['nature'])): ?>
+                                            <span class="badge bg-info me-1"><?php echo htmlspecialchars($ongoing['nature']); ?></span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($ongoing['scope'])): ?>
+                                            <span class="badge bg-secondary"><?php echo htmlspecialchars($ongoing['scope']); ?></span>
+                                        <?php endif; ?>
+                                    </small>
+                                <?php endif; ?>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">Ongoing</span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
 
             <?php if (!empty($upcoming_rows)): ?>
@@ -317,13 +390,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                             </td>
                             <td>
                                 <div class="btn-group" role="group">
-                                    <?php if ($row['status'] === 'upcoming'): ?>
-                                        <a href="update_training_status.php?id=<?php echo $row['id']; ?>&status=completed" 
-                                           class="btn btn-success btn-sm" 
-                                           onclick="return confirm('Mark this training as completed?')">
-                                            <i class="fas fa-check"></i> Mark Completed
-                                        </a>
-                                    <?php endif; ?>
+                                    
                                     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editTrainingModal"
                                         data-training-id="<?php echo $row['id']; ?>"
                                         data-title="<?php echo htmlspecialchars($row['title']); ?>"

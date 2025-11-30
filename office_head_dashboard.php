@@ -50,11 +50,11 @@ if ($office) {
         $stmt->execute([$office]);
         $training_completed = (int)$stmt->fetchColumn();
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status != 'completed' AND end_date >= CURDATE()");
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status = 'upcoming'");
         $stmt->execute([$office]);
         $training_pending = (int)$stmt->fetchColumn();
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status != 'completed' AND end_date < CURDATE()");
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status = 'ongoing'");
         $stmt->execute([$office]);
         $training_overdue = (int)$stmt->fetchColumn();
 } else {
@@ -66,7 +66,7 @@ if ($office) {
 }
 
 // Upcoming trainings for this head (for dashboard list)
-$stmt = $pdo->prepare("SELECT id, title, start_date, end_date, nature, scope FROM training_records WHERE user_id = ? AND status = 'upcoming' ORDER BY end_date ASC LIMIT 10");
+$stmt = $pdo->prepare("SELECT id, title, start_date, end_date, nature, scope FROM training_records WHERE user_id = ? AND status = 'upcoming' ORDER BY start_date ASC LIMIT 10");
 $stmt->execute([$user_id]);
 $result_head_upcoming_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -287,6 +287,44 @@ if ($view === 'office-directory' && !empty($office)) {
             padding: 0.5rem 0.75rem;
             font-weight: 600;
             font-size: 0.75rem;
+        }
+        
+        /* List group item styling for upcoming/ongoing trainings */
+        .list-group-item {
+            padding: 1rem;
+            border: 1px solid rgba(0,0,0,.125);
+            border-radius: 0.375rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s ease;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .list-group-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: rgba(0,0,0,.2);
+        }
+        
+        .list-group-item h6 {
+            font-weight: 600;
+            color: #1a237e;
+            margin-bottom: 0.5rem;
+        }
+        
+        .list-group-item .badge {
+            font-weight: 600;
+            padding: 0.5em 0.75em;
+            font-size: 0.85rem;
+        }
+        
+        .list-group-item .text-muted {
+            font-size: 0.875rem;
+        }
+        
+        .list-group-item .badge.bg-warning {
+            background-color: #ffc107 !important;
+            color: #212529;
         }
 
         /* Center modals */

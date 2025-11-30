@@ -54,7 +54,7 @@ try {
     $training_completion_percentage = ($total_trainings > 0) ? round(($completed_trainings / $total_trainings) * 100) : 0;
         
     // 4. Upcoming Trainings
-    $sql_upcoming = "SELECT COUNT(*) FROM training_records WHERE status = 'upcoming' AND start_date >= CURDATE()";
+    $sql_upcoming = "SELECT COUNT(*) FROM training_records WHERE status = 'upcoming'";
     $stmt_upcoming = $conn->query($sql_upcoming);
     $upcoming_trainings = $stmt_upcoming->fetchColumn();
         
