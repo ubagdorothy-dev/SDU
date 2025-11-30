@@ -61,9 +61,7 @@ body {
 .content-box { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.2); }
 .content-box h2 { color: #1e293b; border-bottom: 3px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 25px; font-weight: 700; font-size: 1.5rem; }
 
-th, td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; }
-th { background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); color: #475569; font-weight: 700; }
-tr:hover td { background-color: #f8fafc; }
+
 
 .modal-body .form-label, .modal-body .form-control-plaintext { color: #1e293b !important; }
 .modal-dialog { display: flex; align-items: center; min-height: calc(100vh - 1rem); }
@@ -71,6 +69,12 @@ tr:hover td { background-color: #f8fafc; }
 
 @media (max-width: 991.98px) { .main-content { margin-left: 0 !important; } }
 @media (max-width: 768px) { .main-content { padding: 1rem; } .stats-cards { grid-template-columns: 1fr; } }
+/* Chart styling */
+.chart-card { padding: 1rem; }
+.chart-wrapper { overflow: hidden; max-height: 260px; }
+.chart-canvas { width: 100%; height: auto; display: block; }
+@media (min-width: 1200px) { .chart-wrapper { max-height: 320px; } }
+@media (max-width: 767px) { .chart-wrapper { max-height: 200px; } }
 </style>
 </head>
 <body id="body">
@@ -84,11 +88,10 @@ tr:hover td { background-color: #f8fafc; }
     </div>
     <div class="offcanvas-body">
         <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
-            <li class="nav-item"><a class="nav-link active" href="#"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="#"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#profileModal"><i class="fas fa-user-circle me-2"></i> <span>Profile</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
+            <li class="nav-item"><a class="nav-link active" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#inboxModal"><i class="fas fa-inbox me-2"></i> <span>Inbox</span> <span id="inboxCount" class="badge bg-danger ms-2" style="font-size:10px;">0</span></a></li>
+            <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
+            <li class="nav-item"><a class="nav-link" href="#"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
         </ul>
     </div>
 </div>
@@ -103,10 +106,9 @@ tr:hover td { background-color: #f8fafc; }
         <label for="sidebar-toggle-checkbox" id="sidebar-toggle" class="btn btn-toggle"><i class="fas fa-bars"></i></label>
     </div>
     <ul class="nav flex-column">
-        <li class="nav-item"><a class="nav-link active" href="#"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
+        <li class="nav-item"><a class="nav-link active" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
         <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals</span></a></li>
-        <li class="nav-item"><a class="nav-link" href="#"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
-        <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#profileModal"><i class="fas fa-user-circle me-2"></i> <span>Profile</span></a></li>
         <li class="nav-item mt-auto"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
     </ul>
 </div>
@@ -124,9 +126,7 @@ tr:hover td { background-color: #f8fafc; }
                 <p class="mb-0" style="color: #6b7280;">Here's what's happening with your organization today.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#profileModal">
-                    <i class="fas fa-user-circle me-2"></i> Profile
-                </button>
+            
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#broadcastModal">
                     <i class="fas fa-bullhorn me-2"></i> Send Notification
                 </button>
@@ -141,61 +141,47 @@ tr:hover td { background-color: #f8fafc; }
         <div class="card"><h3>Trainings Completed</h3><p>85%</p></div>
     </div>
 
-    <!-- Staff Directory Table -->
-    <div class="content-box">
-        <h2>Staff Directory & Training Reports</h2>
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Role</th>
-                    <th>Office</th>
-                    <th>Training</th>
-                    <th>Completion Date</th>
-                    <th>Venue</th>
-                    <th>Nature</th>
-                    <th>Scope</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Alice Johnson</td>
-                    <td>Office Head</td>
-                    <td><span title="Planning">PLN</span></td>
-                    <td>Leadership Workshop</td>
-                    <td>2025-09-15</td>
-                    <td>Conference Hall A</td>
-                    <td>International</td>
-                    <td>Global</td>
-                    <td><span class="badge bg-success">Completed</span></td>
-                </tr>
-                <tr>
-                    <td>Bob Smith</td>
-                    <td>Staff</td>
-                    <td><span title="Finance">FIN</span></td>
-                    <td>Financial Compliance</td>
-                    <td>2025-08-30</td>
-                    <td>Training Room 2</td>
-                    <td>National</td>
-                    <td>Local</td>
-                    <td><span class="badge bg-primary">Ongoing</span></td>
-                </tr>
-                <tr>
-                    <td>Charlie Brown</td>
-                    <td>Staff</td>
-                    <td><span title="IT Support">IT</span></td>
-                    <td>Cybersecurity Basics</td>
-                    <td>2025-07-20</td>
-                    <td>Online</td>
-                    <td>Local</td>
-                    <td>Regional</td>
-                    <td><span class="badge bg-success">Completed</span></td>
-                </tr>
-            </tbody>
-        </table>
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-7">
+            <div class="content-box chart-card">
+                <h2>Total Attendance</h2>
+                <p class="text-muted">Completed trainings across the last 6 months</p>
+                <div class="chart-wrapper"><canvas id="areaChart" class="chart-canvas" height="220"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="content-box chart-card">
+                <h2>Training Statistics</h2>
+                <p class="text-muted">Overview of training activity and completion trends</p>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-12 col-md-4">
+                        <div class="card" style="padding:1rem; border-radius:12px;">
+                            <h3 style="font-size:0.8rem;">Most Attended</h3>
+                            <p style="font-size:1.3rem; font-weight:800; color:#6366f1; margin:0;">Safety Training</p>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="card" style="padding:1rem; border-radius:12px;">
+                            <h3 style="font-size:0.8rem;">Least Attended</h3>
+                            <p style="font-size:1.3rem; font-weight:800; color:#10b981; margin:0;">Leadership 101</p>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="card" style="padding:1rem; border-radius:12px;">
+                            <h3 style="font-size:0.8rem;">This Month</h3>
+                            <p style="font-size:1.3rem; font-weight:800; color:#f59e0b; margin:0;">12 Trainings</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-wrapper"><canvas id="horizontalBarChart" class="chart-canvas" height="220"></canvas></div>
+            </div>
+        </div>
     </div>
-</div>
+
+    
 
 <!-- Modals -->
 <div class="modal fade" id="broadcastModal" tabindex="-1" aria-hidden="true">
@@ -236,19 +222,79 @@ tr:hover td { background-color: #f8fafc; }
     </div>
 </div>
 
-<div class="modal fade" id="profileModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-user-circle me-2"></i>User Profile</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body"><p>Profile content goes here.</p></div>
-            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
-        </div>
-    </div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Area Chart (Total Attendance)
+    const areaCtx = document.getElementById('areaChart').getContext('2d');
+    const areaGradient = areaCtx.createLinearGradient(0, 0, 0, 220);
+    areaGradient.addColorStop(0, 'rgba(99,102,241,0.16)');
+    areaGradient.addColorStop(1, 'rgba(99,102,241,0.02)');
+
+    new Chart(areaCtx, {
+        type: 'line',
+        data: {
+            labels: ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'],
+            datasets: [{
+                label: 'Completed trainings',
+                data: [0, 0, 1, 5, 0, 0],
+                borderColor: '#1e3a8a',
+                backgroundColor: areaGradient,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#1e3a8a',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // Horizontal Bar Chart (Training completion trends over 6 months)
+    const hbarCtx = document.getElementById('horizontalBarChart').getContext('2d');
+    new Chart(hbarCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'],
+            datasets: [
+                {
+                    label: 'Trainings Completed',
+                    data: [8, 12, 9, 15, 11, 14],
+                    backgroundColor: ['#7841f7ff','#7d4af5ff','#7d4decff','#7642f0ff','#8b5cf6','#7d4ceeff'],
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                x: { beginAtZero: true, ticks: { stepSize: 1 } },
+                y: { grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+});
+</script>
+<script>
+
+    // Load count initially and when modal opened
+document.addEventListener('DOMContentLoaded', function(){
+    fetchInboxCount();
+    var inboxModal = document.getElementById('inboxModal');
+    if (inboxModal) inboxModal.addEventListener('show.bs.modal', loadInboxList);
+});
+</script>
 </body>
 </html>
+
