@@ -6,6 +6,84 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
     header("Location: login.php");
     exit();
 }
+// Backend: connect and prepare training-related data
+$pdo = connect_db();
+
+// View selector
+$view = $_GET['view'] ?? 'overview';
+
+$staff_user_id = $_SESSION['user_id'];
+$staff_username = $_SESSION['full_name'] ?? ($_SESSION['email'] ?? 'Staff');
+
+// Auto-complete trainings where end_date has passed
+try {
+    $toCompleteStmt = $pdo->prepare("SELECT id, title, office_code FROM training_records WHERE end_date < CURDATE() AND status != 'completed'");
+    $toCompleteStmt->execute();
+    $toComplete = $toCompleteStmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!empty($toComplete)) {
+        $upd = $pdo->prepare("UPDATE training_records SET status = 'completed' WHERE id = ?");
+        $insn = $pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)");
+        foreach ($toComplete as $t) {
+            $upd->execute([$t['id']]);
+            $title = $t['title'];
+            $msg = "Training marked completed: " . $title;
+            // notify unit directors
+            $nds = $pdo->query("SELECT user_id FROM users WHERE role IN ('unit_director','unit director')")->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($nds as $ud) { $insn->execute([$ud, 'Training Completed', $msg]); }
+            // notify office heads in same office
+            if ($t['office_code']) {
+                $nh = $pdo->prepare("SELECT user_id FROM users WHERE role = 'head' AND office_code = ?");
+                $nh->execute([$t['office_code']]);
+                $heads = $nh->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($heads as $h) { $insn->execute([$h, 'Training Completed', $msg]); }
+            }
+        }
+    }
+} catch (Exception $e) {
+    // ignore; non-fatal
+}
+
+// Counts
+$stmt = $pdo->prepare("SELECT COUNT(*) as c FROM training_records WHERE user_id = ? AND status = 'completed'");
+$stmt->execute([$staff_user_id]);
+$trainings_completed = $stmt->fetchColumn() ?: 0;
+
+$stmt2 = $pdo->prepare("SELECT COUNT(*) as c FROM training_records WHERE user_id = ? AND status != 'completed'");
+$stmt2->execute([$staff_user_id]);
+$trainings_upcoming = $stmt2->fetchColumn() ?: 0;
+
+// Upcoming trainings (for overview list)
+$upcoming_stmt = $pdo->prepare("SELECT id, title, start_date, end_date, status FROM training_records WHERE user_id = ? AND status != 'completed' ORDER BY start_date ASC LIMIT 10");
+$upcoming_stmt->execute([$staff_user_id]);
+// fetch into array for PDO (avoid mysqli-style num_rows/fetch_assoc)
+$upcoming_rows = $upcoming_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Recent activities (last 10)
+$act_stmt = $pdo->prepare("SELECT id, title, status, created_at, start_date, end_date FROM training_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$act_stmt->execute([$staff_user_id]);
+$activity_rows = $act_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Full records for training-records view
+$rec_stmt = $pdo->prepare("SELECT * FROM training_records WHERE user_id = ? ORDER BY start_date DESC");
+$rec_stmt->execute([$staff_user_id]);
+$record_rows = $rec_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$message = $_SESSION['message'] ?? '';
+unset($_SESSION['message']);
+
+// Debug helper: when visiting ?debug=1 show session & recent training_records
+$show_debug = false;
+$debug_rows = [];
+if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+    $show_debug = true;
+    try {
+        $dbgStmt = $pdo->prepare("SELECT * FROM training_records ORDER BY created_at DESC LIMIT 50");
+        $dbgStmt->execute();
+        $debug_rows = $dbgStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $debug_rows = [['error' => $e->getMessage()]];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -16,278 +94,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
     <title>Staff Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            display: flex;
-            background: white;
-            background-attachment: fixed;
-        }
-        @media (min-width: 992px) {
-            body.toggled .sidebar { width: 80px; }
-            body.toggled .main-content { margin-left: 80px; }
-            .sidebar .nav-link { transition: all 0.2s; white-space: nowrap; overflow: hidden; }
-            body.toggled .sidebar .nav-link { text-align: center; padding: 12px 0; }
-            body.toggled .sidebar .nav-link i { margin-right: 0; }
-            body.toggled .sidebar .nav-link span { display: none; }
-            body.toggled .sidebar h3 { display: none; }
-        }
-        .main-content {
-            flex-grow: 1;
-            padding: 2rem;
-            margin-left: 250px; 
-            transition: margin-left 0.3s ease-in-out;
-        }
-        .sidebar {
-            width: 250px;
-            background-color: #1a237e;
-            color: white;
-            height: 100vh;
-            position: fixed;
-            padding-top: 2rem;
-            transition: width 0.3s ease-in-out;
-        }
-        .sidebar .nav-link {
-            color: white;
-            padding: 12px 20px;
-            border-radius: 5px;
-            margin: 5px 15px;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 0.75rem;
-        }
-        .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            background-color: #3f51b5;
-        }
-        .content-box { 
-            background: rgba(255, 255, 255, 0.95); 
-            backdrop-filter: blur(10px);
-            border-radius: 20px; 
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
-            padding: 2rem; 
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.3s ease;
-        }
-        .content-box:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-        }
-        /* Transparent sidebar toggle like admin */
-        .sidebar .btn-toggle {
-            background-color: transparent;
-            border: none;
-            color: #ffffff;
-            padding: 6px 10px;
-        }
-        .sidebar .btn-toggle:focus { box-shadow: none; }
-        .sidebar .btn-toggle:hover { background-color: transparent; }
-        .stats-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                padding: 1rem;
-                margin-left: 0 !important;
-            }
-            
-            .stats-cards {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-            
-            .card {
-                padding: 1.5rem 1rem;
-            }
-            
-            .card p {
-                font-size: 2rem;
-            }
-            
-            .content-box {
-                padding: 1.5rem;
-                border-radius: 16px;
-            }
-            
-            .header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .header p {
-                font-size: 0.9rem;
-            }
-            
-            .quick-actions {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .main-content {
-                padding: 0.5rem;
-            }
-            
-            .card {
-                padding: 1rem;
-            }
-            
-            .content-box {
-                padding: 1rem;
-            }
-            
-            .header h1 {
-                font-size: 1.25rem;
-            }
-            
-            .table-responsive {
-                font-size: 0.85rem;
-            }
-            
-            .btn-group {
-                flex-direction: column;
-                gap: 0.25rem;
-            }
-        }
-        .card {
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-            padding: 2rem 1.5rem;
-            text-align: center;
-            border: none;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--card-color), var(--card-color-light));
-        }
-        .card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-        }
-        .card h3 {
-            margin: 0 0 1rem;
-            color: var(--card-color);
-            font-size: 0.9rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .card p {
-            font-size: 2.5rem;
-            font-weight: 900;
-            color: var(--card-color);
-            margin: 0;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .stats-cards .card:nth-child(1) { 
-            --card-color: #10b981;
-            --card-color-light: #6ee7b7;
-        }
-        .stats-cards .card:nth-child(2) { 
-            --card-color: #f59e0b;
-            --card-color-light: #fbbf24;
-        }
-        .quick-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .action-card {
-            background: #1a237e;
-            color: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            text-align: center;
-            transition: transform 0.3s ease;
-        }
-        .action-card:hover {
-            transform: translateY(-5px);
-        }
-        .action-card a {
-            color: white;
-            text-decoration: none;
-            display: block;
-        }
-        .action-card i {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-        }
-        .btn-group .btn {
-            margin-right: 5px;
-        }
-        .btn-group .btn:last-child {
-            margin-right: 0;
-        }
-        .progress-bar {
-            background-color: #e9ecef;
-            border-radius: 10px;
-            height: 20px;
-            margin: 10px 0;
-        }
-        .progress-fill {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100%;
-            border-radius: 10px;
-            transition: width 0.3s ease;
-        }
-
-        .table thead th {
-            background: #020381;
-            color: white;
-            font-weight: 600;
-            padding: 1rem;
-            border: none;
-        }
-
-         /* Training records action buttons */
-         .table .btn-sm {
-            border-radius: 8px;
-            padding: 0.5rem 0.75rem;
-            font-weight: 600;
-            font-size: 0.875rem;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-        }
-        
-        .table .btn-sm:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        }
-        
-        .table .btn-sm i {
-            font-size: 0.8rem;
-        }
-        
-        .table td .d-flex {
-            align-items: center;
-        }
-
-    
-        /* Center modals both horizontally and vertically */
-        .modal-dialog {
-            display: flex;
-            align-items: center;
-            min-height: calc(100vh - 1rem);
-        }
-        
-        .modal-content {
-            width: 100%;
-        }
-    </style>
+    <link rel="stylesheet" href="staff.css">
 </head>
 <body id="body">
 
@@ -321,6 +128,30 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
     </div>
 
     <div class="main-content">
+        <?php if ($show_debug): ?>
+            <div class="alert alert-secondary">
+                <strong>DEBUG</strong> - Session user_id: <?php echo htmlspecialchars($staff_user_id); ?> | Showing last <?php echo count($debug_rows); ?> training_records
+                <div style="max-height:300px; overflow:auto; margin-top:8px;">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead><tr><th>id</th><th>user_id</th><th>title</th><th>status</th><th>start_date</th><th>end_date</th><th>created_at</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($debug_rows as $dr): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($dr['id'] ?? ''); ?></td>
+                                <td><?php echo htmlspecialchars($dr['user_id'] ?? ''); ?></td>
+                                <td><?php echo htmlspecialchars(substr($dr['title'] ?? '',0,60)); ?></td>
+                                <td><?php echo htmlspecialchars($dr['status'] ?? ''); ?></td>
+                                <td><?php echo htmlspecialchars($dr['start_date'] ?? ''); ?></td>
+                                <td><?php echo htmlspecialchars($dr['end_date'] ?? ''); ?></td>
+                                <td><?php echo htmlspecialchars($dr['created_at'] ?? ''); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mt-2 mb-0"><em>Remove ?debug=1 from the URL to hide this panel.</em></p>
+            </div>
+        <?php endif; ?>
         <?php if ($view === 'overview'): ?>
             <div class="header mb-4">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -371,36 +202,36 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
             </div>
 
 
-            <?php if ($result_upcoming && $result_upcoming->num_rows > 0): ?>
+            <?php if (!empty($upcoming_rows)): ?>
             <div class="content-box mt-4">
                 <h2>Upcoming Trainings</h2>
                 <div class="list-group">
-                    <?php while ($upcoming = $result_upcoming->fetch_assoc()): ?>
+                    <?php foreach ($upcoming_rows as $upcoming): ?>
                         <div class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-1"><?php echo htmlspecialchars($upcoming['title']); ?></h6>
-                                <small class="text-muted">Scheduled for <?php echo date('M d, Y', strtotime($upcoming['completion_date'])); ?></small>
+                                <small class="text-muted">Scheduled for <?php echo date('M d, Y', strtotime($upcoming['start_date'])); ?> — <?php echo date('M d, Y', strtotime($upcoming['end_date'])); ?></small>
                             </div>
                             <span class="badge bg-warning rounded-pill">Upcoming</span>
                         </div>
-                    <?php endwhile; ?>
+                    <?php endforeach; ?>
                 </div>
             </div>
             <?php endif; ?>
 
             <div class="content-box mt-4">
                 <h2>Recent Activity</h2>
-            <?php if ($result_activities && $result_activities->num_rows > 0): ?>
+                <?php if (!empty($activity_rows)): ?>
                     <div class="list-group">
-                        <?php while ($activity = $result_activities->fetch_assoc()): ?>
+                            <?php foreach ($activity_rows as $activity): ?>
                             <div class="list-group-item d-flex justify-content-between align-items-center">
                                 <div>
                                     <h6 class="mb-1"><?php echo htmlspecialchars($activity['title']); ?></h6>
                                     <small class="text-muted">
                                         <?php if ($activity['status'] === 'completed'): ?>
-                                            Completed on <?php echo date('M d, Y', strtotime($activity['completion_date'])); ?>
+                                            Completed on <?php echo date('M d, Y', strtotime($activity['end_date'])); ?>
                                         <?php else: ?>
-                                            Added on <?php echo date('M d, Y', strtotime($activity['created_at'])); ?> - Scheduled for <?php echo date('M d, Y', strtotime($activity['completion_date'])); ?>
+                                            Added on <?php echo date('M d, Y', strtotime($activity['created_at'])); ?> - Scheduled for <?php echo date('M d, Y', strtotime($activity['start_date'])); ?> — <?php echo date('M d, Y', strtotime($activity['end_date'])); ?>
                                         <?php endif; ?>
                                     </small>
                                 </div>
@@ -408,7 +239,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                                     <?php echo ucfirst($activity['status']); ?>
                                 </span>
                             </div>
-                        <?php endwhile; ?>
+                            <?php endforeach; ?>
                     </div>
                 <?php else: ?>
                     <div class="text-center py-4">
@@ -430,7 +261,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
             </button>
         </div>
         <?php echo $message; ?>
-        <?php if ($result_records && $result_records->num_rows > 0): ?>
+        <?php if (!empty($record_rows)): ?>
             <table class="table table-striped mt-4">
                 <thead>
                     <tr>
@@ -442,11 +273,11 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                     </tr>
                 </thead>
                 <tbody>
-                    <?php while ($row = $result_records->fetch_assoc()): ?>
+                    <?php foreach ($record_rows as $row): ?>
                         <tr>
                             <td><?php echo htmlspecialchars($row['title']); ?></td>
                             <td><?php echo htmlspecialchars($row['description']); ?></td>
-                            <td><?php echo htmlspecialchars($row['completion_date']); ?></td>
+                            <td><?php echo htmlspecialchars($row['start_date']); ?> — <?php echo htmlspecialchars($row['end_date']); ?></td>
                             <td>
                                 <span class="badge <?php echo $row['status'] === 'completed' ? 'bg-success' : 'bg-warning'; ?>">
                                     <?php echo ucfirst($row['status']); ?>
@@ -465,10 +296,18 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                                         data-training-id="<?php echo $row['id']; ?>"
                                         data-title="<?php echo htmlspecialchars($row['title']); ?>"
                                         data-description="<?php echo htmlspecialchars($row['description']); ?>"
-                                        data-date="<?php echo htmlspecialchars($row['completion_date']); ?>"
-                                        data-status="<?php echo htmlspecialchars($row['status']); ?>">
+                                        data-start-date="<?php echo htmlspecialchars($row['start_date']); ?>"
+                                        data-end-date="<?php echo htmlspecialchars($row['end_date']); ?>"
+                                        data-status="<?php echo htmlspecialchars($row['status']); ?>"
+                                        data-employment="<?php echo htmlspecialchars($row['employment_status'] ?? ''); ?>"
+                                        data-degree="<?php echo htmlspecialchars($row['degree_attained'] ?? ''); ?>"
+                                        data-degree-other="<?php echo htmlspecialchars($row['degree_other'] ?? ''); ?>"
+                                        data-venue="<?php echo htmlspecialchars($row['venue'] ?? ''); ?>">
                                         <i class="fas fa-edit"></i> Edit
                                     </button>
+                                    <?php if ($row['status'] === 'completed' && empty($row['proof_uploaded'])): ?>
+                                        <button class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadProofModal" data-training-id="<?php echo $row['id']; ?>"> <i class="fas fa-upload"></i> Upload Proof</button>
+                                    <?php endif; ?>
                                     <a href="delete_training.php?id=<?php echo $row['id']; ?>" 
                                        class="btn btn-danger btn-sm" 
                                        onclick="return confirm('Are you sure you want to delete this training record?')">
@@ -477,7 +316,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                                 </div>
                             </td>
                         </tr>
-                    <?php endwhile; ?>
+                    <?php endforeach; ?>
                 </tbody>
             </table>
         <?php else: ?>
@@ -499,94 +338,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                     b.classList.toggle('toggled');
                 });
             }
-            // Build Add Training Modal dynamically
-            var addModalEl = document.createElement('div');
-            addModalEl.className = 'modal fade';
-            addModalEl.id = 'addTrainingModal';
-            addModalEl.tabIndex = -1;
-            addModalEl.innerHTML = '\
-        <div class="modal-dialog">\
-          <div class="modal-content">\
-            <div class="modal-header">\
-              <h5 class="modal-title">Add Training</h5>\
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>\
-            </div>\
-            <form id="addTrainingForm">\
-              <div class="modal-body">\
-                <div class="mb-3">\
-                  <label class="form-label">Training Title</label>\
-                  <input type="text" name="title" class="form-control" required />\
-                </div>\
-                <div class="mb-3">\
-                  <label class="form-label">Description</label>\
-                  <textarea name="description" class="form-control" rows="3"></textarea>\
-                </div>\
-                <div class="mb-3">\
-                  <label class="form-label">Date</label>\
-                  <input type="date" name="completion_date" class="form-control" required />\
-                </div>\
-                <div class="mb-3">\
-                  <label class="form-label">Status</label>\
-                  <select name="status" class="form-control" required>\
-                    <option value="completed">Completed</option>\
-                    <option value="upcoming">Upcoming</option>\
-                  </select>\
-                </div>\
-                <div id="addTrainingFeedback"></div>\
-              </div>\
-              <div class="modal-footer">\
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>\
-                <button type="submit" class="btn btn-primary">Save</button>\
-              </div>\
-            </form>\
-          </div>\
-        </div>';
-            document.body.appendChild(addModalEl);
-
-            // Build Edit Training Modal dynamically
-            var editModalEl = document.createElement('div');
-            editModalEl.className = 'modal fade';
-            editModalEl.id = 'editTrainingModal';
-            editModalEl.tabIndex = -1;
-            editModalEl.innerHTML = '\
-        <div class="modal-dialog">\
-          <div class="modal-content">\
-            <div class="modal-header">\
-              <h5 class="modal-title">Edit Training</h5>\
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>\
-            </div>\
-            <form id="editTrainingForm">\
-              <div class="modal-body">\
-                <input type="hidden" name="id" />\
-                <div class="mb-3">\
-                  <label class="form-label">Training Title</label>\
-                  <input type="text" name="title" class="form-control" required />\
-                </div>\
-                <div class="mb-3">\
-                  <label class="form-label">Description</label>\
-                  <textarea name="description" class="form-control" rows="3"></textarea>\
-                </div>\
-                <div class="mb-3">\
-                  <label class="form-label">Date</label>\
-                  <input type="date" name="completion_date" class="form-control" required />\
-                </div>\
-                <div class="mb-3">\
-                  <label class="form-label">Status</label>\
-                  <select name="status" class="form-control" required>\
-                    <option value="completed">Completed</option>\
-                    <option value="upcoming">Upcoming</option>\
-                  </select>\
-                </div>\
-                <div id="editTrainingFeedback"></div>\
-              </div>\
-              <div class="modal-footer">\
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>\
-                <button type="submit" class="btn btn-primary">Update</button>\
-              </div>\
-            </form>\
-          </div>\
-        </div>';
-            document.body.appendChild(editModalEl);
+            // Static modals are rendered in the HTML (below) to avoid JS string quoting issues
 
             var editTrainingModal = document.getElementById('editTrainingModal');
             if (editTrainingModal) {
@@ -596,12 +348,18 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                     var form = document.getElementById('editTrainingForm');
                     form.elements['id'].value = button.getAttribute('data-training-id');
                     form.elements['title'].value = button.getAttribute('data-title');
-                    form.elements['completion_date'].value = button.getAttribute('data-date');
-                    // Populate description (was missing) so textarea shows existing description when editing
+                    // handle start_date / end_date fields
+                    if (form.elements['start_date']) form.elements['start_date'].value = button.getAttribute('data-start-date') || '';
+                    if (form.elements['end_date']) form.elements['end_date'].value = button.getAttribute('data-end-date') || '';
+                    // Populate description
                     if (form.elements['description']) {
                         form.elements['description'].value = button.getAttribute('data-description') || '';
                     }
-                    form.elements['status'].value = button.getAttribute('data-status');
+                    if (form.elements['status']) form.elements['status'].value = button.getAttribute('data-status') || 'upcoming';
+                    if (form.elements['employment_status']) form.elements['employment_status'].value = button.getAttribute('data-employment') || '';
+                    if (form.elements['degree_attained']) form.elements['degree_attained'].value = button.getAttribute('data-degree') || '';
+                    if (form.elements['degree_other']) form.elements['degree_other'].value = button.getAttribute('data-degree-other') || '';
+                    if (form.elements['venue']) form.elements['venue'].value = button.getAttribute('data-venue') || '';
                 });
             }
 
@@ -611,19 +369,23 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                     e.preventDefault();
                     var fd = new FormData(addForm);
                     fetch('training_api.php?action=create', { method: 'POST', body: fd, credentials: 'same-origin' })
-                        .then(function(r){ return r.json(); })
+                        .then(function(r){ return r.json().catch(function(){ return { success:false, error: 'Invalid JSON response from server', rawStatus: r.status }; }); })
                         .then(function(data){
                             var fb = document.getElementById('addTrainingFeedback');
+                            console.log('training_api#create response:', data);
                             if (data.success) {
                                 fb.innerHTML = '<div class="alert alert-success">Training added!</div>';
                                 setTimeout(function(){ window.location.reload(); }, 600);
                             } else {
-                                fb.innerHTML = '<div class="alert alert-danger">' + (data.error || 'Failed') + '</div>';
+                                var msg = data.error || 'Failed';
+                                if (data.raw) msg += ' (raw:' + JSON.stringify(data.raw) + ')';
+                                fb.innerHTML = '<div class="alert alert-danger">' + msg + '</div>';
                             }
                         })
-                        .catch(function(){
+                        .catch(function(err){
                             var fb = document.getElementById('addTrainingFeedback');
-                            fb.innerHTML = '<div class="alert alert-danger">Request failed</div>';
+                            console.error('Fetch error on create:', err);
+                            fb.innerHTML = '<div class="alert alert-danger">Request failed: ' + (err && err.message ? err.message : 'network error') + '</div>';
                         });
                 });
             }
@@ -649,8 +411,42 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
                             fb.innerHTML = '<div class="alert alert-danger">Request failed</div>';
                         });
                 });
-            }
 
+                        
+                        // Attach handlers to the static upload proof modal and form
+                        var uploadProofModal = document.getElementById('uploadProofModal');
+                        if (uploadProofModal) {
+                            uploadProofModal.addEventListener('show.bs.modal', function (event) {
+                                var button = event.relatedTarget;
+                                if (!button) return;
+                                var form = document.getElementById('uploadProofForm');
+                                if (form && form.elements['training_id']) form.elements['training_id'].value = button.getAttribute('data-training-id');
+                            });
+                        }
+
+                        var uploadForm = document.getElementById('uploadProofForm');
+                        if (uploadForm) {
+                            uploadForm.addEventListener('submit', function(e){
+                                e.preventDefault();
+                                var fd = new FormData(uploadForm);
+                                fetch('training_api.php?action=upload_proof', { method: 'POST', body: fd, credentials: 'same-origin' })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(data){
+                                        var fb = document.getElementById('uploadProofFeedback');
+                                        if (data.success) {
+                                            fb.innerHTML = '<div class="alert alert-success">Proof uploaded and sent for review.</div>';
+                                            setTimeout(function(){ window.location.reload(); }, 900);
+                                        } else {
+                                            fb.innerHTML = '<div class="alert alert-danger">' + (data.error || 'Upload failed') + '</div>';
+                                        }
+                                    }).catch(function(){
+                                        var fb = document.getElementById('uploadProofFeedback');
+                                        fb.innerHTML = '<div class="alert alert-danger">Request failed</div>';
+                                    });
+                            });
+                        }
+
+                        // Training records modal loader
             // Training records modal loader
             const trainingRecordsModal = document.getElementById('trainingRecordsModal');
             if (trainingRecordsModal) {
@@ -733,8 +529,195 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['staff'])) {
             </div>
         </div>
     </div>
+    <?php
+    // Include profile modal if present; otherwise render a simple fallback modal
+    if (file_exists(__DIR__ . '/profile_modal.php')) {
+        include __DIR__ . '/profile_modal.php';
+    } else {
+        ?>
+        <div class="modal fade" id="profileModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Profile</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Name:</strong> <?php echo htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['email'] ?? ''); ?></p>
+                        <p><strong>Email:</strong> <?php echo htmlspecialchars($_SESSION['email'] ?? ''); ?></p>
+                        <p><strong>Role:</strong> <?php echo htmlspecialchars($_SESSION['role'] ?? ''); ?></p>
+                        <p class="text-muted">Profile editing is not available because the profile modal file is missing.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    ?>
 
-    <?php include 'profile_modal.php'; ?>
+    <!-- STATIC: Add Training Modal -->
+    <div class="modal fade" id="addTrainingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Training</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="addTrainingForm" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Training Title</label>
+                            <input type="text" name="title" class="form-control" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="3"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" class="form-control" required />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" class="form-control" required />
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Employment Status</label>
+                            <select name="employment_status" class="form-control">
+                                <option value="Probationary">Probationary</option>
+                                <option value="Permanent/Regular">Permanent/Regular</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Degree Attained</label>
+                            <select name="degree_attained" class="form-control" id="add_degree_select">
+                                <option value="Bachelors">Bachelors</option>
+                                <option value="Masters">Master's</option>
+                                <option value="Doctorate">Doctorate / PhD</option>
+                                <option value="Others">Others (specify)</option>
+                            </select>
+                            <input type="text" name="degree_other" class="form-control mt-2" placeholder="If Others, specify" style="display:none;" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Venue</label>
+                            <input type="text" name="venue" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select name="status" class="form-control">
+                                <option value="completed">Completed</option>
+                                <option value="upcoming" selected>Upcoming</option>
+                            </select>
+                        </div>
+                        <div id="addTrainingFeedback"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATIC: Edit Training Modal -->
+    <div class="modal fade" id="editTrainingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Training</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="editTrainingForm" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <input type="hidden" name="id" />
+                        <div class="mb-3">
+                            <label class="form-label">Training Title</label>
+                            <input type="text" name="title" class="form-control" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="3"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" class="form-control" required />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" class="form-control" required />
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Employment Status</label>
+                            <select name="employment_status" class="form-control">
+                                <option value="Probationary">Probationary</option>
+                                <option value="Permanent/Regular">Permanent/Regular</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Degree Attained</label>
+                            <select name="degree_attained" class="form-control">
+                                <option value="Bachelors">Bachelors</option>
+                                <option value="Masters">Master's</option>
+                                <option value="Doctorate">Doctorate / PhD</option>
+                                <option value="Others">Others (specify)</option>
+                            </select>
+                            <input type="text" name="degree_other" class="form-control mt-2" placeholder="If Others, specify" style="display:none;" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Venue</label>
+                            <input type="text" name="venue" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select name="status" class="form-control">
+                                <option value="completed">Completed</option>
+                                <option value="upcoming">Upcoming</option>
+                            </select>
+                        </div>
+                        <div id="editTrainingFeedback"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATIC: Upload Proof Modal -->
+    <div class="modal fade" id="uploadProofModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Upload Proof of Completion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="uploadProofForm" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <input type="hidden" name="training_id" />
+                        <div class="mb-3">
+                            <label class="form-label">Select file (photo or certificate)</label>
+                            <input type="file" name="proof" class="form-control" accept="image/*,.pdf" required />
+                        </div>
+                        <div id="uploadProofFeedback"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Load notifications modal

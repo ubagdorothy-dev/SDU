@@ -8,7 +8,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email']);
     $password = $_POST['password'];
 
-    $sql = "SELECT user_id, password_hash, role, full_name FROM users WHERE email = ?";
+    $sql = "SELECT user_id, password_hash, role, full_name, is_approved FROM users WHERE email = ?";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$email]);
     $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -17,28 +17,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stored_hash = trim($user_data['password_hash']);
 
         if (password_verify($password, $stored_hash)) {
-            // LOGIN SUCCESSFUL
-            $_SESSION['user_id'] = $user_data['user_id'];
-            $_SESSION['full_name'] = $user_data['full_name'];
-            $_SESSION['role'] = $user_data['role'];
+            // PASSWORD VERIFIED - Now check approval status
+            if (!$user_data['is_approved']) {
+                $_SESSION['login_error'] = "Your account is pending approval by your Unit Director. Please try logging in again after approval.";
+            } else {
+                // LOGIN SUCCESSFUL - Account is approved
+                $_SESSION['user_id'] = $user_data['user_id'];
+                $_SESSION['full_name'] = $user_data['full_name'];
+                $_SESSION['role'] = $user_data['role'];
+                $_SESSION['approval_notification'] = "Your account has been approved by your Unit Director. Welcome!";
 
-            // Role-based redirection
-            switch ($user_data['role']) {
-                case 'unit director': 
-                    header("Location: admin_dashboard.php");
-                    exit();
-                case 'head':
-                    header("Location: office_head_dashboard.php");
-                    exit();
-                case 'staff':
-                    header("Location: staff_dashboard.php");
-                    exit();
-                case 'unassigned':
-                    $_SESSION['login_error'] = "Your account is awaiting role assignment.";
-                    break;
-                default:
-                    $_SESSION['login_error'] = "Unknown account role. Contact administrator.";
-                    break;
+                // Role-based redirection
+                switch ($user_data['role']) {
+                    case 'unit_director':
+                    case 'unit director': 
+                        header("Location: admin_dashboard.php");
+                        exit();
+                    case 'head':
+                        header("Location: office_head_dashboard.php");
+                        exit();
+                    case 'staff':
+                        header("Location: staff_dashboard.php");
+                        exit();
+                    default:
+                        $_SESSION['login_error'] = "Unknown account role. Contact administrator.";
+                        break;
+                }
             }
         } else {
             $_SESSION['login_error'] = "Invalid password.";
@@ -92,7 +96,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         flex-direction: column; 
         justify-content: center;
         align-items: center; 
-        padding: 20px;
+        padding: 30px 20px;
     }
 
     .login-left .login-logo {
@@ -109,7 +113,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         font-weight: 700;
         margin-bottom: 10px;
         text-align: center; 
-        padding-left: 0; 
+        line-height: 1.4; 
     }
 
     .login-right {
