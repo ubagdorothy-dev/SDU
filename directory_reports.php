@@ -98,32 +98,11 @@ $trainingsJson = $trainingsByUser;
 <title>Staff Directory & Training Reports</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="admin_sidebar.css">
 <style>
     
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
-body { font-family: 'Montserrat', sans-serif; display:flex; background:#f0f2f5; }
-.main-content { flex-grow: 1; padding: 2rem; transition: margin-left 0.3s ease-in-out; }
-.sidebar-lg { transition: width 0.3s ease-in-out; }
-@media (min-width:992px){
-  .sidebar-lg{ width:250px; background:#1a237e; color:#fff; height:100vh; position:fixed; padding-top:2rem; display:flex; flex-direction:column; justify-content:center; }
-  .sidebar-lg .d-flex.justify-content-between { padding: 0.75rem 1rem; }
-  .main-content{ margin-left:250px; }
-}
-/* Sidebar collapse toggle */
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg { width: 80px; padding-top: 1rem; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .nav-link span,
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .logo-text,
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg h5 { display: none; }
-#sidebar-toggle-checkbox:checked ~ .main-content { margin-left: 80px; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .nav-link { text-align: center; padding: 12px 0; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .d-flex.justify-content-between { padding-left: 0.25rem !important; padding-right: 0.25rem !important; margin-bottom: 1rem !important; }
-
-.sidebar-lg .d-flex h5 { font-weight: 700; margin-right: 0 !important; }
-.sidebar-lg .nav-link { color: #ffffff !important; padding: 12px 20px; border-radius: 5px; margin: 5px 15px; transition: background-color 0.2s; white-space: nowrap; overflow: hidden; }
-.sidebar-lg .nav-link:hover, .sidebar-lg .nav-link.active { background-color: #3f51b5; color: #ffffff !important; }
-.sidebar-lg .btn-toggle { background-color: transparent; border: none; color: #ffffff; padding: 6px 10px; cursor: pointer; }
-.sidebar-lg .btn-toggle:focus { box-shadow: none; }
-
+body { font-family: 'Montserrat', sans-serif; }
 
 .content-box{background:rgba(255,255,255,.98);border-radius:12px;padding:2rem;box-shadow:0 8px 32px rgba(0,0,0,.08);border:1px solid rgba(0,0,0,.03)}
 .content-box h2{font-weight:800;color:#2b3742;margin-bottom:1rem}
@@ -134,7 +113,6 @@ body { font-family: 'Montserrat', sans-serif; display:flex; background:#f0f2f5; 
 
 .modal-body .form-label, .modal-body .form-control-plaintext { color: #1e293b !important; }
 .modal-dialog { display: flex; align-items: center; min-height: calc(100vh - 1rem); }
-.sidebar-logo { height: 30px; width: auto; margin-right: 8px; }
 
 @media (max-width:991.98px){ .main-content{ margin-left:0!important } }
 /* Master-detail table styles (lightweight) */
@@ -263,6 +241,7 @@ body { font-family: 'Montserrat', sans-serif; display:flex; background:#f0f2f5; 
             <th scope="col">Role</th>
             <th scope="col">Email</th>
             <th scope="col">Office</th>
+            <th scope="col">Position</th>
             <th scope="col">Program</th>
             <th scope="col">Job Function</th>
             <th scope="col">Degree Attained</th>
@@ -496,6 +475,7 @@ function renderStaffTable(){
       <td>${escapeHtml(staff.role || '')}</td>
       <td>${escapeHtml(staff.email || '')}</td>
       <td>${escapeHtml(staff.office || '')}</td>
+      <td>${escapeHtml(staff.position || '')}</td>
       <td>${escapeHtml(staff.program || '')}</td>
       <td>${escapeHtml(staff.job_function || '')}</td>
       <td>${escapeHtml(staff.degree_attained || '')}</td>
@@ -528,7 +508,11 @@ function onViewTraining(trainingId, btn) {
   const date = row.children[4] ? row.children[4].innerText : '';
   const venue = row.children[5] ? row.children[5].innerText : '';
   const status = row.children[6] ? row.children[6].innerText : '';
-  alert(`Training:\n${title}\nDate: ${date}\nVenue: ${venue}\nStatus: ${status}`);
+  alert(`Training:
+${title}
+Date: ${date}
+Venue: ${venue}
+Status: ${status}`);
 }
 
 function onUploadProof(trainingId, btn) {

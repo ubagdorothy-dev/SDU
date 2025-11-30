@@ -14,21 +14,12 @@ if (!isset($_SESSION['user_id'])) {
 try {
     $pdo = connect_db();
     
-    // Get the training ID and desired status from query params or POST
+    // Get the training ID from query params or POST
     $training_id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_POST['id']) ? (int)$_POST['id'] : null);
-    $status = isset($_GET['status']) ? $_GET['status'] : (isset($_POST['status']) ? $_POST['status'] : null);
     
-    if (!$training_id || !$status) {
+    if (!$training_id) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Missing required parameters (id, status)']);
-        exit();
-    }
-    
-    // Validate status is one of allowed values
-    $allowed_statuses = ['upcoming', 'ongoing', 'completed', 'cancelled'];
-    if (!in_array($status, $allowed_statuses)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid status value']);
+        echo json_encode(['success' => false, 'error' => 'Missing required parameter (id)']);
         exit();
     }
     
@@ -69,9 +60,72 @@ try {
         exit();
     }
     
+    // Get current training details to automatically determine status
+    $training_details = $pdo->prepare("SELECT start_date, end_date FROM training_records WHERE id = ?");
+    $training_details->execute([$training_id]);
+    $details = $training_details->fetch(PDO::FETCH_ASSOC);
+    
+    if ($details) {
+        $start_date = $details['start_date'];
+        $end_date = $details['end_date'];
+        $current_date = date('Y-m-d');
+        
+        // Automatically determine status based on dates
+        if ($end_date < $current_date) {
+            $status = 'completed';
+        } elseif ($start_date <= $current_date && $end_date >= $current_date) {
+            $status = 'ongoing';
+        } else {
+            $status = 'upcoming';
+        }
+    }
+    
     // Update the training status
     $update = $pdo->prepare("UPDATE training_records SET status = ? WHERE id = ?");
     $update->execute([$status, $training_id]);
+    
+    // If the training is being marked as completed, send notifications to Unit Head
+    if ($status === 'completed') {
+        // Get training details
+        $training_stmt = $pdo->prepare("SELECT title, user_id, office_code FROM training_records WHERE id = ?");
+        $training_stmt->execute([$training_id]);
+        $training_info = $training_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($training_info) {
+            $title = $training_info['title'];
+            $staff_user_id = $training_info['user_id'];
+            $office_code = $training_info['office_code'];
+            
+            // Get staff name
+            $staff_stmt = $pdo->prepare("SELECT full_name FROM users WHERE user_id = ?");
+            $staff_stmt->execute([$staff_user_id]);
+            $staff_info = $staff_stmt->fetch(PDO::FETCH_ASSOC);
+            $staff_name = $staff_info ? $staff_info['full_name'] : 'Unknown Staff';
+            
+            // Create notification message
+            $message = "Staff member {$staff_name} has completed training: {$title}";
+            
+            // Notify unit directors (role 'unit director')
+            $nd = $pdo->prepare("SELECT user_id FROM users WHERE role = 'unit director'");
+            $nd->execute();
+            $unitDirectors = $nd->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($unitDirectors as $ud) {
+                $insn = $pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)");
+                $insn->execute([$ud, 'Staff Training Completed', $message]);
+            }
+            
+            // Notify office heads within same office_code
+            if ($office_code) {
+                $nh = $pdo->prepare("SELECT user_id FROM users WHERE role = 'head' AND office_code = ?");
+                $nh->execute([$office_code]);
+                $heads = $nh->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($heads as $h) {
+                    $insn = $pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)");
+                    $insn->execute([$h, 'Staff Training Completed', $message]);
+                }
+            }
+        }
+    }
     
     http_response_code(200);
     echo json_encode([

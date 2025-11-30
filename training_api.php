@@ -4,12 +4,18 @@ require_once 'db.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
+// Log that the API was called
+error_log("Training API called with action: " . ($_GET['action'] ?? ($_POST['action'] ?? 'unknown')));
+
 $pdo = connect_db();
 
 if (!isset($_SESSION['user_id'])) {
+    error_log("User not authenticated");
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit();
 }
+
+error_log("User authenticated with ID: " . $_SESSION['user_id']);
 
 $user_id = $_SESSION['user_id'];
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
@@ -40,12 +46,26 @@ try {
             $start_date = $completion_date;
             $end_date = $completion_date;
         }
-        $status = $_POST['status'] ?? 'upcoming';
         $venue = $_POST['venue'] ?? null;
+        $nature = $_POST['nature'] ?? null;
+        $scope = $_POST['scope'] ?? null;
 
         if (!$title || !$start_date || !$end_date) {
             throw new Exception('Title and start/end dates are required');
         }
+        
+        // Automatically determine status based on dates
+        $current_date = date('Y-m-d');
+        if ($end_date < $current_date) {
+            $status = 'completed';
+        } elseif ($start_date <= $current_date && $end_date >= $current_date) {
+            $status = 'ongoing';
+        } else {
+            $status = 'upcoming';
+        }
+        
+        // Log received data for debugging
+        error_log("Received training data: title=$title, start_date=$start_date, end_date=$end_date, status=$status, venue=$venue");
 
         // infer office_code from users table if available
         $stmt = $pdo->prepare("SELECT office_code FROM users WHERE user_id = ?");
@@ -53,8 +73,8 @@ try {
         $office = $stmt->fetch(PDO::FETCH_ASSOC);
         $office_code = $office['office_code'] ?? null;
 
-        $ins = $pdo->prepare("INSERT INTO training_records (user_id, title, description, start_date, end_date, status, venue, office_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $ins->execute([$user_id, $title, $description, $start_date, $end_date, $status, $venue, $office_code]);
+        $ins = $pdo->prepare("INSERT INTO training_records (user_id, title, description, start_date, end_date, status, venue, office_code, nature, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $ins->execute([$user_id, $title, $description, $start_date, $end_date, $status, $venue, $office_code, $nature, $scope]);
 
         echo json_encode(['success' => true, 'id' => $pdo->lastInsertId()]);
         exit();
@@ -72,8 +92,9 @@ try {
             $start_date = $completion_date;
             $end_date = $completion_date;
         }
-        $status = $_POST['status'] ?? 'upcoming';
         $venue = $_POST['venue'] ?? null;
+        $nature = $_POST['nature'] ?? null;
+        $scope = $_POST['scope'] ?? null;
         if ($venue === null) {
             $cur = $pdo->prepare("SELECT venue FROM training_records WHERE id = ? AND user_id = ?");
             $cur->execute([$id, $user_id]);
@@ -82,9 +103,22 @@ try {
                 $venue = $row['venue'];
             }
         }
+        
+        // Automatically determine status based on dates
+        $current_date = date('Y-m-d');
+        if ($end_date < $current_date) {
+            $status = 'completed';
+        } elseif ($start_date <= $current_date && $end_date >= $current_date) {
+            $status = 'ongoing';
+        } else {
+            $status = 'upcoming';
+        }
+        
+        // Log received data for debugging
+        error_log("Updating training data: title=$title, start_date=$start_date, end_date=$end_date, status=$status, venue=$venue");
 
-        $upd = $pdo->prepare("UPDATE training_records SET title = ?, description = ?, start_date = ?, end_date = ?, status = ?, venue = ? WHERE id = ? AND user_id = ?");
-        $upd->execute([$title, $description, $start_date, $end_date, $status, $venue, $id, $user_id]);
+        $upd = $pdo->prepare("UPDATE training_records SET title = ?, description = ?, start_date = ?, end_date = ?, status = ?, venue = ?, nature = ?, scope = ? WHERE id = ? AND user_id = ?");
+        $upd->execute([$title, $description, $start_date, $end_date, $status, $venue, $nature, $scope, $id, $user_id]);
 
         echo json_encode(['success' => true]);
         exit();
@@ -116,16 +150,17 @@ try {
         $u->execute([$training_id, $user_id]);
 
         // notify office head(s) and unit director(s)
-        // find office_code for training
-        $stmt = $pdo->prepare("SELECT office_code, title FROM training_records WHERE id = ?");
+        // find office_code for training and get staff details
+        $stmt = $pdo->prepare("SELECT tr.office_code, tr.title, u.full_name FROM training_records tr JOIN users u ON tr.user_id = u.user_id WHERE tr.id = ?");
         $stmt->execute([$training_id]);
         $tr = $stmt->fetch(PDO::FETCH_ASSOC);
         $office_code = $tr['office_code'] ?? null;
         $title = $tr['title'] ?? 'Training';
+        $staff_name = $tr['full_name'] ?? 'Unknown Staff';
 
-        $message = "Proof of completion uploaded for: $title";
+        $message = "Proof of completion uploaded by {$staff_name} for: $title";
         // notify unit directors (role 'unit director')
-        $nd = $pdo->prepare("SELECT user_id FROM users WHERE role IN ('unit_director','unit director')");
+        $nd = $pdo->prepare("SELECT user_id FROM users WHERE role = 'unit director'");
         $nd->execute();
         $unitDirectors = $nd->fetchAll(PDO::FETCH_COLUMN);
         foreach ($unitDirectors as $ud) {

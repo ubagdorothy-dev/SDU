@@ -80,37 +80,14 @@ try {
 <!-- Bootstrap & Font Awesome Links -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="admin_sidebar.css">
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
 
 body { 
     font-family: 'Montserrat', sans-serif;
-    display: flex; 
-    background-color: #f0f2f5;
 }
-.main-content { flex-grow: 1; padding: 2rem; transition: margin-left 0.3s ease-in-out; }
-.sidebar-lg { transition: width 0.3s ease-in-out; }
-
-@media (min-width: 992px) {
-    .sidebar-lg { width: 250px; background-color: #1a237e; color: white; height: 100vh; position: fixed; padding-top: 2rem; }
-    .main-content { margin-left: 250px; }
-}
-
-/* Sidebar collapse toggle */
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg { width: 80px; padding-top: 1rem; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .nav-link span,
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .logo-text,
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg h5 { display: none; }
-#sidebar-toggle-checkbox:checked ~ .main-content { margin-left: 80px; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .nav-link { text-align: center; padding: 12px 0; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .d-flex.justify-content-between { padding-left: 0.25rem !important; padding-right: 0.25rem !important; margin-bottom: 1rem !important; }
-
-.sidebar-lg .d-flex h5 { font-weight: 700; margin-right: 0 !important; }
-.sidebar-lg .nav-link { color: #ffffff !important; padding: 12px 20px; border-radius: 5px; margin: 5px 15px; transition: background-color 0.2s; white-space: nowrap; overflow: hidden; }
-.sidebar-lg .nav-link:hover, .sidebar-lg .nav-link.active { background-color: #3f51b5; color: #ffffff !important; }
-.sidebar-lg .btn-toggle { background-color: transparent; border: none; color: #ffffff; padding: 6px 10px; cursor: pointer; }
-.sidebar-lg .btn-toggle:focus { box-shadow: none; }
 
 .stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
 .card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); padding: 2rem 1.5rem; text-align: center; border: none; transition: all 0.3s ease; position: relative; overflow: hidden; }

@@ -62,6 +62,7 @@ try {
 <title>Unit Director - Dashboard</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="admin_sidebar.css">
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
@@ -75,7 +76,20 @@ body {
 .sidebar-lg { transition: width 0.3s ease-in-out; }
 
 @media (min-width: 992px) {
-    .sidebar-lg { width: 250px; background-color: #1a237e; color: white; height: 100vh; position: fixed; padding-top: 2rem; }
+    .sidebar-lg { 
+        width: 250px; 
+        background-color: #1a237e; 
+        color: white; 
+        height: 100vh; 
+        position: fixed; 
+        padding-top: 2rem; 
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .sidebar-lg .d-flex.justify-content-between { 
+        padding: 0.75rem 1rem; 
+    }
     .main-content { margin-left: 250px; }
 }
 
@@ -102,9 +116,36 @@ body {
 }
 
 
-.sidebar-lg .d-flex h5 { font-weight: 700; margin-right: 0 !important; }
-.sidebar-lg .nav-link { color: #ffffff !important; padding: 12px 20px; border-radius: 5px; margin: 5px 15px; transition: background-color 0.2s; white-space: nowrap; overflow: hidden; }
-.sidebar-lg .nav-link:hover, .sidebar-lg .nav-link.active { background-color: #3f51b5; color: #ffffff !important; }
+/* Consistent sidebar styling */
+.sidebar-lg .d-flex h5 { 
+    font-weight: 700; 
+    margin-right: 0 !important; 
+    font-size: 1rem;
+}
+.sidebar-lg .nav-link { 
+    color: #ffffff !important; 
+    padding: 12px 20px; 
+    border-radius: 5px; 
+    margin: 5px 15px; 
+    transition: background-color 0.2s; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    display: flex;
+    align-items: center;
+}
+.sidebar-lg .nav-link:hover, 
+.sidebar-lg .nav-link.active { 
+    background-color: #3f51b5; 
+    color: #ffffff !important; 
+}
+.sidebar-lg .nav-link i {
+    min-width: 20px;
+    text-align: center;
+    margin-right: 15px;
+}
+#sidebar-toggle-checkbox:checked ~ .sidebar-lg .nav-link i {
+    margin-right: 0;
+}
 .sidebar-lg .btn-toggle { background-color: transparent; border: none; color: #ffffff; padding: 6px 10px; cursor: pointer; }
 .sidebar-lg .btn-toggle:focus { box-shadow: none; }
 
@@ -134,40 +175,64 @@ body {
 .chart-canvas { width: 100%; height: auto; display: block; }
 @media (min-width: 1200px) { .chart-wrapper { max-height: 320px; } }
 @media (max-width: 767px) { .chart-wrapper { max-height: 200px; } }
+
+        /* Offcanvas sidebar for mobile */
+        .offcanvas {
+            background-color: #1a237e;
+        }
+        .offcanvas .nav-link {
+            color: #ffffff !important;
+            padding: 12px 20px;
+            border-radius: 5px;
+            margin: 5px 0;
+            transition: background-color 0.2s;
+        }
+        .offcanvas .nav-link:hover,
+        .offcanvas .nav-link.active {
+            background-color: #3f51b5;
+            color: #ffffff !important;
+        }
+        .offcanvas .nav-link i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
 </style>
 </head>
 <body id="body">
 <input type="checkbox" id="sidebar-toggle-checkbox" style="display: none;">
 
-<div class="offcanvas offcanvas-start bg-dark" tabindex="-1" id="offcanvasNavbar" aria-labelledby="offcanvasNavbarLabel">
-    <div class="offcanvas-header text-white">
-        <h5 class="offcanvas-title" id="offcanvasNavbarLabel">SDU Menu</h5>
-        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body">
-        <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
-            <li class="nav-item"><a class="nav-link active" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#inboxModal"><i class="fas fa-inbox me-2"></i> <span>Inbox</span> <span id="inboxCount" class="badge bg-danger ms-2" style="font-size:10px;">0</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
-            <li class="nav-item"><a class="nav-link" href="#"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
-        </ul>
-    </div>
+<!-- Offcanvas Mobile -->
+<div class="offcanvas offcanvas-start bg-dark" tabindex="-1" id="offcanvasNavbar">
+  <div class="offcanvas-header text-white">
+    <h5 class="offcanvas-title">SDU Menu</h5>
+    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link active" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i>Dashboard</a></li>
+      <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i>Directory & Reports</a></li>
+      <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i>Pending Approvals</a></li>
+      <li class="nav-item"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+    </ul>
+  </div>
 </div>
 
+<!-- Desktop Sidebar -->
 <div class="sidebar-lg d-none d-lg-block">
-    <div class="d-flex justify-content-between align-items-center px-3 mb-3">
-        <div class="d-flex align-items-center">
-            <img src="SDU_Logo.png" alt="SDU Logo" class="sidebar-logo">
-            <h5 class="m-0 text-white"><span class="logo-text">SDU UNIT DIRECTOR</span></h5>
-        </div>
-        <label for="sidebar-toggle-checkbox" id="sidebar-toggle" class="btn btn-toggle"><i class="fas fa-bars"></i></label>
+  <div class="d-flex justify-content-between align-items-center px-3 mb-3">
+    <div class="d-flex align-items-center">
+      <img src="SDU_Logo.png" class="sidebar-logo" alt="SDU">
+      <h5 class="m-0 text-white">SDU UNIT DIRECTOR</h5>
     </div>
-    <ul class="nav flex-column">
-        <li class="nav-item"><a class="nav-link active" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
-        <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
-        <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals</span></a></li>
-        <li class="nav-item mt-auto"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
-    </ul>
+    <label for="sidebar-toggle-checkbox" class="btn btn-toggle" style="color:#fff;border:none;background:transparent"><i class="fas fa-bars"></i></label>
+  </div>
+  <ul class="nav flex-column">
+    <li class="nav-item"><a class="nav-link active" href="admin_dashboard.php" ><i class="fas fa-chart-line me-2"></i><span> Dashboard</span></a></li>
+    <li class="nav-item"><a class="nav-link" href="directory_reports.php" ><i class="fas fa-users me-2"></i><span> Directory & Reports</span></a></li>
+    <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span> Pending Approvals</span></a></li>
+    <li class="nav-item mt-auto"><a class="nav-link" href="logout.php" ><i class="fas fa-sign-out-alt me-2"></i><span> Logout</span></a></li>
+  </ul>
 </div>
 
 <div class="main-content">
@@ -182,7 +247,10 @@ body {
                 <p class="mb-0" style="color: #6b7280;">Here's what's happening with your organization today.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-            
+                <button class="btn btn-primary position-relative" data-bs-toggle="modal" data-bs-target="#inboxModal">
+                    <i class="fas fa-bell me-2"></i> Inbox
+                    <span id="inboxCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none;">0</span>
+                </button>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#broadcastModal">
                     <i class="fas fa-bullhorn me-2"></i> Send Notification
                 </button>
@@ -271,6 +339,42 @@ body {
                     <button type="submit" class="btn btn-primary">Send</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Inbox Modal -->
+<div class="modal fade" id="inboxModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-inbox me-2"></i>Notifications Inbox</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <button id="markAllReadBtn" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="fas fa-check-double me-1"></i>Mark All Read
+                        </button>
+                        <button id="deleteAllBtn" class="btn btn-sm btn-outline-danger">
+                            <i class="fas fa-trash-alt me-1"></i>Delete All
+                        </button>
+                    </div>
+                    <div>
+                        <span id="notificationCount" class="text-muted small">Loading notifications...</span>
+                    </div>
+                </div>
+                <div id="notificationsList">
+                    <div class="text-center py-4">
+                        <div class="spinner-border" role="status"></div>
+                        <p class="mt-2">Loading notifications...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -416,6 +520,211 @@ document.addEventListener('DOMContentLoaded', function () {
     fetchInboxCount();
     var inboxModal = document.getElementById('inboxModal');
     if (inboxModal) inboxModal.addEventListener('show.bs.modal', loadInboxList);
+});
+
+// Fetch inbox count
+function fetchInboxCount() {
+    fetch('admin_api.php?action=get_notifications')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const unreadCount = data.notifications.filter(n => !n.is_read).length;
+                const inboxCountElement = document.getElementById('inboxCount');
+                if (inboxCountElement) {
+                    if (unreadCount > 0) {
+                        inboxCountElement.textContent = unreadCount;
+                        inboxCountElement.style.display = 'inline';
+                    } else {
+                        inboxCountElement.style.display = 'none';
+                    }
+                }
+            }
+        })
+        .catch(error => console.error('Error fetching inbox count:', error));
+}
+
+// Load inbox list
+function loadInboxList() {
+    fetch('admin_api.php?action=get_notifications')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderNotifications(data.notifications);
+            } else {
+                document.getElementById('notificationsList').innerHTML = 
+                    '<div class="alert alert-danger">Failed to load notifications</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading notifications:', error);
+            document.getElementById('notificationsList').innerHTML = 
+                '<div class="alert alert-danger">Error loading notifications</div>';
+        });
+}
+
+// Render notifications
+function renderNotifications(notifications) {
+    const container = document.getElementById('notificationsList');
+    const countElement = document.getElementById('notificationCount');
+    
+    if (countElement) {
+        countElement.textContent = `${notifications.length} notifications`;
+    }
+    
+    if (notifications.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-inbox fa-3x mb-3 text-muted"></i>
+                <h5>No notifications</h5>
+                <p class="text-muted">You don't have any notifications at the moment.</p>
+            </div>`;
+        return;
+    }
+    
+    let html = '<div class="list-group">';
+    
+    notifications.forEach(notification => {
+        const isUnreadClass = !notification.is_read ? 'list-group-item-warning' : '';
+        const unreadIndicator = !notification.is_read ? '<span class="badge bg-warning me-2">NEW</span>' : '';
+        
+        html += `
+            <div class="list-group-item ${isUnreadClass}" data-notification-id="${notification.id}">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${unreadIndicator}${notification.title}</h6>
+                    <small class="text-muted">${notification.time_ago}</small>
+                </div>
+                <p class="mb-1">${notification.message}</p>
+                <div class="mt-2">
+                    ${!notification.is_read ? 
+                        `<button class="btn btn-sm btn-outline-primary mark-read-btn" data-id="${notification.id}">
+                            <i class="fas fa-check me-1"></i>Mark Read
+                        </button>` : ''}
+                    <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${notification.id}">
+                        <i class="fas fa-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </div>`;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+    
+    // Add event listeners for mark read buttons
+    document.querySelectorAll('.mark-read-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            markAsRead([id]);
+        });
+    });
+    
+    // Add event listeners for delete buttons
+    document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            deleteNotifications([id]);
+        });
+    });
+}
+
+// Mark notifications as read
+function markAsRead(ids) {
+    fetch('admin_api.php?action=mark_notifications_read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ids: ids })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload notifications
+            loadInboxList();
+            // Update inbox count
+            fetchInboxCount();
+        } else {
+            alert('Failed to mark notifications as read');
+        }
+    })
+    .catch(error => {
+        console.error('Error marking as read:', error);
+        alert('Error marking notifications as read');
+    });
+}
+
+// Delete notifications
+function deleteNotifications(ids) {
+    if (!confirm('Are you sure you want to delete these notifications?')) {
+        return;
+    }
+    
+    fetch('admin_api.php?action=delete_notifications', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ids: ids })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload notifications
+            loadInboxList();
+            // Update inbox count
+            fetchInboxCount();
+        } else {
+            alert('Failed to delete notifications');
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting notifications:', error);
+        alert('Error deleting notifications');
+    });
+}
+
+// Mark all as read
+document.getElementById('markAllReadBtn').addEventListener('click', function() {
+    fetch('admin_api.php?action=get_notifications')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Filter unread notifications
+                const unreadIds = data.notifications
+                    .filter(n => !n.is_read)
+                    .map(n => n.id);
+                
+                if (unreadIds.length > 0) {
+                    markAsRead(unreadIds);
+                } else {
+                    alert('No unread notifications to mark as read');
+                }
+            }
+        });
+});
+
+// Delete all notifications
+document.getElementById('deleteAllBtn').addEventListener('click', function() {
+    fetch('admin_api.php?action=get_notifications')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.notifications.length > 0) {
+                    const allIds = data.notifications.map(n => n.id);
+                    deleteNotifications(allIds);
+                } else {
+                    alert('No notifications to delete');
+                }
+            }
+        });
+});
+
+// Refresh inbox count periodically
+setInterval(fetchInboxCount, 30000); // Every 30 seconds
+
+// Load count initially and when modal opened
+fetchInboxCount();
+var inboxModal = document.getElementById('inboxModal');
+if (inboxModal) inboxModal.addEventListener('show.bs.modal', loadInboxList);
 });
 </script>
 </body>

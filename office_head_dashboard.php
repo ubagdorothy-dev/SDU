@@ -66,19 +66,19 @@ if ($office) {
 }
 
 // Upcoming trainings for this head (for dashboard list)
-$stmt = $pdo->prepare("SELECT id, title, end_date AS completion_date FROM training_records WHERE user_id = ? AND status = 'upcoming' ORDER BY end_date ASC LIMIT 10");
+$stmt = $pdo->prepare("SELECT id, title, start_date, end_date, nature, scope FROM training_records WHERE user_id = ? AND status = 'upcoming' ORDER BY end_date ASC LIMIT 10");
 $stmt->execute([$user_id]);
 $result_head_upcoming_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Recent activity (head)
-$stmt = $pdo->prepare("SELECT id, title, end_date AS completion_date, created_at, status FROM training_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 6");
+$stmt = $pdo->prepare("SELECT id, title, start_date, end_date, created_at, status, nature, scope FROM training_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 6");
 $stmt->execute([$user_id]);
 $result_head_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Training records (for training-records view)
 $result_records = [];
 if ($view === 'training-records') {
-    $stmt = $pdo->prepare("SELECT id, title, description, end_date AS completion_date, status FROM training_records WHERE user_id = ? ORDER BY created_at DESC");
+    $stmt = $pdo->prepare("SELECT id, title, description, start_date, end_date, status, venue, nature, scope FROM training_records WHERE user_id = ? ORDER BY created_at DESC");
     $stmt->execute([$user_id]);
     $result_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -486,7 +486,17 @@ if ($view === 'office-directory' && !empty($office)) {
                         <div class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-1"><?php echo htmlspecialchars($upcoming['title']); ?></h6>
-                                <small class="text-muted">Scheduled for <?php echo date('M d, Y', strtotime($upcoming['completion_date'])); ?></small>
+                                <small class="text-muted">Scheduled for <?php echo date('M d, Y', strtotime($upcoming['start_date'])); ?> — <?php echo date('M d, Y', strtotime($upcoming['end_date'])); ?></small>
+                                <?php if (!empty($upcoming['nature']) || !empty($upcoming['scope'])): ?>
+                                    <small class="d-block mt-1">
+                                        <?php if (!empty($upcoming['nature'])): ?>
+                                            <span class="badge bg-info me-1"><?php echo htmlspecialchars($upcoming['nature']); ?></span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($upcoming['scope'])): ?>
+                                            <span class="badge bg-secondary"><?php echo htmlspecialchars($upcoming['scope']); ?></span>
+                                        <?php endif; ?>
+                                    </small>
+                                <?php endif; ?>
                             </div>
                             <span class="badge bg-warning rounded-pill">Upcoming</span>
                         </div>
@@ -505,11 +515,21 @@ if ($view === 'office-directory' && !empty($office)) {
                                     <h6 class="mb-1"><?php echo htmlspecialchars($activity['title']); ?></h6>
                                     <small class="text-muted">
                                         <?php if ($activity['status'] === 'completed'): ?>
-                                            Completed on <?php echo date('M d, Y', strtotime($activity['completion_date'])); ?>
+                                            Completed on <?php echo date('M d, Y', strtotime($activity['end_date'])); ?>
                                         <?php else: ?>
-                                            Added on <?php echo date('M d, Y', strtotime($activity['created_at'])); ?> - Scheduled for <?php echo date('M d, Y', strtotime($activity['completion_date'])); ?>
+                                            Added on <?php echo date('M d, Y', strtotime($activity['created_at'])); ?> - Scheduled for <?php echo date('M d, Y', strtotime($activity['start_date'])); ?> — <?php echo date('M d, Y', strtotime($activity['end_date'])); ?>
                                         <?php endif; ?>
                                     </small>
+                                    <?php if (!empty($activity['nature']) || !empty($activity['scope'])): ?>
+                                        <small class="d-block mt-1">
+                                            <?php if (!empty($activity['nature'])): ?>
+                                                <span class="badge bg-info me-1"><?php echo htmlspecialchars($activity['nature']); ?></span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($activity['scope'])): ?>
+                                                <span class="badge bg-secondary"><?php echo htmlspecialchars($activity['scope']); ?></span>
+                                            <?php endif; ?>
+                                        </small>
+                                    <?php endif; ?>
                                 </div>
                                 <span class="badge <?php echo $activity['status'] === 'completed' ? 'bg-success' : 'bg-warning'; ?> rounded-pill">
                                     <?php echo ucfirst($activity['status']); ?>
@@ -544,7 +564,9 @@ if ($view === 'office-directory' && !empty($office)) {
                             <tr>
                                 <th scope="col">Training Title</th>
                                 <th scope="col">Description</th>
-                                <th scope="col">Date</th>
+                                <th scope="col">Dates</th>
+                                <th scope="col">Nature</th>
+                                <th scope="col">Scope</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Actions</th>
                             </tr>
@@ -554,7 +576,9 @@ if ($view === 'office-directory' && !empty($office)) {
                                 <tr>
                                     <td><?php echo htmlspecialchars($row['title']); ?></td>
                                     <td><?php echo htmlspecialchars($row['description']); ?></td>
-                                    <td><?php echo htmlspecialchars($row['completion_date']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['start_date']); ?> — <?php echo htmlspecialchars($row['end_date']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['nature'] ?? ''); ?></td>
+                                    <td><?php echo htmlspecialchars($row['scope'] ?? ''); ?></td>
                                     <td>
                                         <span class="badge <?php echo $row['status'] === 'completed' ? 'bg-success' : 'bg-warning'; ?>">
                                             <?php echo ucfirst($row['status']); ?>
@@ -574,7 +598,11 @@ if ($view === 'office-directory' && !empty($office)) {
                                                 data-training-id="<?php echo $row['id']; ?>"
                                                 data-title="<?php echo htmlspecialchars($row['title']); ?>"
                                                 data-description="<?php echo htmlspecialchars($row['description']); ?>"
-                                                data-date="<?php echo htmlspecialchars($row['completion_date']); ?>"
+                                                data-start-date="<?php echo htmlspecialchars($row['start_date'] ?? ''); ?>"
+                                                data-end-date="<?php echo htmlspecialchars($row['end_date'] ?? ''); ?>"
+                                                data-venue="<?php echo htmlspecialchars($row['venue'] ?? ''); ?>"
+                                                data-nature="<?php echo htmlspecialchars($row['nature'] ?? ''); ?>"
+                                                data-scope="<?php echo htmlspecialchars($row['scope'] ?? ''); ?>"
                                                 data-status="<?php echo htmlspecialchars($row['status']); ?>"
                                                 title="Edit training">
                                                 <i class="fas fa-edit me-1"></i> Edit
@@ -790,8 +818,7 @@ if ($view === 'office-directory' && !empty($office)) {
                 submitBtn.disabled = true;
                 feedback.innerHTML = '';
                 const fd = new FormData(form);
-                fd.set('audience', 'office-staff');
-                fetch('send_notification.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                fetch('head_broadcast.php', { method: 'POST', body: fd, credentials: 'same-origin' })
                     .then(r => r.json())
                     .then(resp => {
                         if (resp.success) {
@@ -830,6 +857,7 @@ if ($view === 'office-directory' && !empty($office)) {
         function initAddTrainingForm() {
             const addForm = document.getElementById('addTrainingForm');
             if (!addForm) return;
+            
             addForm.addEventListener('submit', function(e){
                 e.preventDefault();
                 const fd = new FormData(addForm);
@@ -857,8 +885,13 @@ if ($view === 'office-directory' && !empty($office)) {
                     form.elements['id'].value = button.getAttribute('data-training-id');
                     form.elements['title'].value = button.getAttribute('data-title');
                     form.elements['description'].value = button.getAttribute('data-description') || '';
-                    form.elements['completion_date'].value = button.getAttribute('data-date');
-                    form.elements['status'].value = button.getAttribute('data-status');
+                    // Handle start_date / end_date fields
+                    if (form.elements['start_date']) form.elements['start_date'].value = button.getAttribute('data-start-date') || '';
+                    if (form.elements['end_date']) form.elements['end_date'].value = button.getAttribute('data-end-date') || '';
+                    if (form.elements['venue']) form.elements['venue'].value = button.getAttribute('data-venue') || '';
+                    if (form.elements['nature']) form.elements['nature'].value = button.getAttribute('data-nature') || '';
+                    if (form.elements['scope']) form.elements['scope'].value = button.getAttribute('data-scope') || '';
+                    if (form.elements['status']) form.elements['status'].value = button.getAttribute('data-status') || 'upcoming';
                 });
             }
 
@@ -944,15 +977,45 @@ if ($view === 'office-directory' && !empty($office)) {
                             <label class="form-label">Description</label>
                             <textarea name="description" class="form-control" rows="3"></textarea>
                         </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" class="form-control" required />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" class="form-control" required />
+                            </div>
+                        </div>
                         <div class="mb-3">
-                            <label class="form-label">Date</label>
-                            <input type="date" name="completion_date" class="form-control" required />
+                            <label class="form-label">Venue</label>
+                            <input type="text" name="venue" class="form-control" />
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nature</label>
+                                <select name="nature" class="form-control">
+                                    <option value="">Select Nature</option>
+                                    <option value="Probationary">Probationary</option>
+                                    <option value="Permanent/Regular">Permanent/Regular</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Scope</label>
+                                <select name="scope" class="form-control">
+                                    <option value="">Select Scope</option>
+                                    <option value="Local">Local</option>
+                                    <option value="Regional">Regional</option>
+                                    <option value="National">National</option>
+                                    <option value="International">International</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Status</label>
-                            <select name="status" class="form-select" required>
+                            <select name="status" class="form-control">
                                 <option value="completed">Completed</option>
-                                <option value="upcoming">Upcoming</option>
+                                <option value="upcoming" selected>Upcoming</option>
                             </select>
                         </div>
                         <div id="addTrainingFeedback"></div>
@@ -985,13 +1048,43 @@ if ($view === 'office-directory' && !empty($office)) {
                             <label class="form-label">Description</label>
                             <textarea name="description" class="form-control" rows="3"></textarea>
                         </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" class="form-control" required />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" class="form-control" required />
+                            </div>
+                        </div>
                         <div class="mb-3">
-                            <label class="form-label">Date</label>
-                            <input type="date" name="completion_date" class="form-control" required />
+                            <label class="form-label">Venue</label>
+                            <input type="text" name="venue" class="form-control" />
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nature</label>
+                                <select name="nature" class="form-control">
+                                    <option value="">Select Nature</option>
+                                    <option value="Probationary">Probationary</option>
+                                    <option value="Permanent/Regular">Permanent/Regular</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Scope</label>
+                                <select name="scope" class="form-control">
+                                    <option value="">Select Scope</option>
+                                    <option value="Local">Local</option>
+                                    <option value="Regional">Regional</option>
+                                    <option value="National">National</option>
+                                    <option value="International">International</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Status</label>
-                            <select name="status" class="form-select" required>
+                            <select name="status" class="form-control">
                                 <option value="completed">Completed</option>
                                 <option value="upcoming">Upcoming</option>
                             </select>

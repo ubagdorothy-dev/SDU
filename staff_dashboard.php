@@ -28,7 +28,7 @@ try {
             $title = $t['title'];
             $msg = "Training marked completed: " . $title;
             // notify unit directors
-            $nds = $pdo->query("SELECT user_id FROM users WHERE role IN ('unit_director','unit director')")->fetchAll(PDO::FETCH_COLUMN);
+            $nds = $pdo->query("SELECT user_id FROM users WHERE role = 'unit director'")->fetchAll(PDO::FETCH_COLUMN);
             foreach ($nds as $ud) { $insn->execute([$ud, 'Training Completed', $msg]); }
             // notify office heads in same office
             if ($t['office_code']) {
@@ -53,13 +53,13 @@ $stmt2->execute([$staff_user_id]);
 $trainings_upcoming = $stmt2->fetchColumn() ?: 0;
 
 // Upcoming trainings (for overview list)
-$upcoming_stmt = $pdo->prepare("SELECT id, title, start_date, end_date, status FROM training_records WHERE user_id = ? AND status != 'completed' ORDER BY start_date ASC LIMIT 10");
+$upcoming_stmt = $pdo->prepare("SELECT id, title, start_date, end_date, status, nature, scope FROM training_records WHERE user_id = ? AND status != 'completed' ORDER BY start_date ASC LIMIT 10");
 $upcoming_stmt->execute([$staff_user_id]);
 // fetch into array for PDO (avoid mysqli-style num_rows/fetch_assoc)
 $upcoming_rows = $upcoming_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Recent activities (last 10)
-$act_stmt = $pdo->prepare("SELECT id, title, status, created_at, start_date, end_date FROM training_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$act_stmt = $pdo->prepare("SELECT id, title, status, created_at, start_date, end_date, nature, scope FROM training_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
 $act_stmt->execute([$staff_user_id]);
 $activity_rows = $act_stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -215,6 +215,16 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                             <div>
                                 <h6 class="mb-1"><?php echo htmlspecialchars($upcoming['title']); ?></h6>
                                 <small class="text-muted">Scheduled for <?php echo date('M d, Y', strtotime($upcoming['start_date'])); ?> — <?php echo date('M d, Y', strtotime($upcoming['end_date'])); ?></small>
+                                <?php if (!empty($upcoming['nature']) || !empty($upcoming['scope'])): ?>
+                                    <small class="d-block mt-1">
+                                        <?php if (!empty($upcoming['nature'])): ?>
+                                            <span class="badge bg-info me-1"><?php echo htmlspecialchars($upcoming['nature']); ?></span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($upcoming['scope'])): ?>
+                                            <span class="badge bg-secondary"><?php echo htmlspecialchars($upcoming['scope']); ?></span>
+                                        <?php endif; ?>
+                                    </small>
+                                <?php endif; ?>
                             </div>
                             <span class="badge bg-warning rounded-pill">Upcoming</span>
                         </div>
@@ -238,6 +248,16 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                                             Added on <?php echo date('M d, Y', strtotime($activity['created_at'])); ?> - Scheduled for <?php echo date('M d, Y', strtotime($activity['start_date'])); ?> — <?php echo date('M d, Y', strtotime($activity['end_date'])); ?>
                                         <?php endif; ?>
                                     </small>
+                                    <?php if (!empty($activity['nature']) || !empty($activity['scope'])): ?>
+                                        <small class="d-block mt-1">
+                                            <?php if (!empty($activity['nature'])): ?>
+                                                <span class="badge bg-info me-1"><?php echo htmlspecialchars($activity['nature']); ?></span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($activity['scope'])): ?>
+                                                <span class="badge bg-secondary"><?php echo htmlspecialchars($activity['scope']); ?></span>
+                                            <?php endif; ?>
+                                        </small>
+                                    <?php endif; ?>
                                 </div>
                                 <span class="badge <?php echo $activity['status'] === 'completed' ? 'bg-success' : 'bg-warning'; ?> rounded-pill">
                                     <?php echo ucfirst($activity['status']); ?>
@@ -271,7 +291,11 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                     <tr>
                         <th scope="col">Training Title</th>
                         <th scope="col">Description</th>
-                        <th scope="col">Date</th>
+                        <th scope="col">Start Date</th>
+                        <th scope="col">End Date</th>
+                        <th scope="col">Venue</th>
+                        <th scope="col">Nature</th>
+                        <th scope="col">Scope</th>
                         <th scope="col">Status</th>
                         <th scope="col">Actions</th>
                     </tr>
@@ -281,7 +305,11 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                         <tr>
                             <td><?php echo htmlspecialchars($row['title']); ?></td>
                             <td><?php echo htmlspecialchars($row['description']); ?></td>
-                            <td><?php echo htmlspecialchars($row['start_date']); ?> — <?php echo htmlspecialchars($row['end_date']); ?></td>
+                            <td><?php echo htmlspecialchars($row['start_date']); ?></td>
+                            <td><?php echo htmlspecialchars($row['end_date']); ?></td>
+                            <td><?php echo htmlspecialchars($row['venue'] ?? ''); ?></td>
+                            <td><?php echo htmlspecialchars($row['nature'] ?? ''); ?></td>
+                            <td><?php echo htmlspecialchars($row['scope'] ?? ''); ?></td>
                             <td>
                                 <span class="badge <?php echo $row['status'] === 'completed' ? 'bg-success' : 'bg-warning'; ?>">
                                     <?php echo ucfirst($row['status']); ?>
@@ -302,21 +330,19 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                                         data-description="<?php echo htmlspecialchars($row['description']); ?>"
                                         data-start-date="<?php echo htmlspecialchars($row['start_date']); ?>"
                                         data-end-date="<?php echo htmlspecialchars($row['end_date']); ?>"
-                                        data-status="<?php echo htmlspecialchars($row['status']); ?>"
-                                        data-employment="<?php echo htmlspecialchars($row['employment_status'] ?? ''); ?>"
-                                        data-degree="<?php echo htmlspecialchars($row['degree_attained'] ?? ''); ?>"
-                                        data-degree-other="<?php echo htmlspecialchars($row['degree_other'] ?? ''); ?>"
-                                        data-venue="<?php echo htmlspecialchars($row['venue'] ?? ''); ?>">
+                                        data-venue="<?php echo htmlspecialchars($row['venue'] ?? ''); ?>"
+                                        data-nature="<?php echo htmlspecialchars($row['nature'] ?? ''); ?>"
+                                        data-scope="<?php echo htmlspecialchars($row['scope'] ?? ''); ?>">
                                         <i class="fas fa-edit"></i> Edit
                                     </button>
-                                    <?php if ($row['status'] === 'completed' && empty($row['proof_uploaded'])): ?>
-                                        <button class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadProofModal" data-training-id="<?php echo $row['id']; ?>"> <i class="fas fa-upload"></i> Upload Proof</button>
-                                    <?php endif; ?>
                                     <a href="delete_training.php?id=<?php echo $row['id']; ?>" 
                                        class="btn btn-danger btn-sm" 
                                        onclick="return confirm('Are you sure you want to delete this training record?')">
                                         <i class="fas fa-trash"></i> Delete
                                     </a>
+                                     <?php if ($row['status'] === 'completed' && empty($row['proof_uploaded'])): ?>
+                                        <button class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadProofModal" data-training-id="<?php echo $row['id']; ?>"> <i class="fas fa-upload"></i> Upload Proof</button>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
@@ -375,8 +401,7 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                 });
             }
 
-            // Static modals are rendered in the HTML (below) to avoid JS string quoting issues
-
+            // Setup for edit training form
             var editTrainingModal = document.getElementById('editTrainingModal');
             if (editTrainingModal) {
                 editTrainingModal.addEventListener('show.bs.modal', function (event) {
@@ -392,11 +417,10 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                     if (form.elements['description']) {
                         form.elements['description'].value = button.getAttribute('data-description') || '';
                     }
-                    if (form.elements['status']) form.elements['status'].value = button.getAttribute('data-status') || 'upcoming';
-                    if (form.elements['employment_status']) form.elements['employment_status'].value = button.getAttribute('data-employment') || '';
-                    if (form.elements['degree_attained']) form.elements['degree_attained'].value = button.getAttribute('data-degree') || '';
-                    if (form.elements['degree_other']) form.elements['degree_other'].value = button.getAttribute('data-degree-other') || '';
+
                     if (form.elements['venue']) form.elements['venue'].value = button.getAttribute('data-venue') || '';
+                    if (form.elements['nature']) form.elements['nature'].value = button.getAttribute('data-nature') || '';
+                    if (form.elements['scope']) form.elements['scope'].value = button.getAttribute('data-scope') || '';
                 });
             }
 
@@ -404,7 +428,14 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
             if (addForm) {
                 addForm.addEventListener('submit', function(e){
                     e.preventDefault();
+                    
+                    // Log form data for debugging
                     var fd = new FormData(addForm);
+                    console.log('Form data being sent:');
+                    for (var pair of fd.entries()) {
+                        console.log(pair[0] + ': ' + pair[1]);
+                    }
+                    
                     fetch('training_api.php?action=create', { method: 'POST', body: fd, credentials: 'same-origin' })
                         .then(function(r){ return r.json().catch(function(){ return { success:false, error: 'Invalid JSON response from server', rawStatus: r.status }; }); })
                         .then(function(data){
@@ -431,7 +462,14 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
             if (editForm) {
                 editForm.addEventListener('submit', function(e){
                     e.preventDefault();
+                    
+                    // Log form data for debugging
                     var fd = new FormData(editForm);
+                    console.log('Edit form data being sent:');
+                    for (var pair of fd.entries()) {
+                        console.log(pair[0] + ': ' + pair[1]);
+                    }
+                    
                     fetch('training_api.php?action=update', { method: 'POST', body: fd, credentials: 'same-origin' })
                         .then(function(r){ return r.json(); })
                         .then(function(data){
@@ -448,42 +486,41 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                             fb.innerHTML = '<div class="alert alert-danger">Request failed</div>';
                         });
                 });
+            }
 
-                        
-                        // Attach handlers to the static upload proof modal and form
-                        var uploadProofModal = document.getElementById('uploadProofModal');
-                        if (uploadProofModal) {
-                            uploadProofModal.addEventListener('show.bs.modal', function (event) {
-                                var button = event.relatedTarget;
-                                if (!button) return;
-                                var form = document.getElementById('uploadProofForm');
-                                if (form && form.elements['training_id']) form.elements['training_id'].value = button.getAttribute('data-training-id');
-                            });
-                        }
+            // Attach handlers to the static upload proof modal and form
+            var uploadProofModal = document.getElementById('uploadProofModal');
+            if (uploadProofModal) {
+                uploadProofModal.addEventListener('show.bs.modal', function (event) {
+                    var button = event.relatedTarget;
+                    if (!button) return;
+                    var form = document.getElementById('uploadProofForm');
+                    if (form && form.elements['training_id']) form.elements['training_id'].value = button.getAttribute('data-training-id');
+                });
+            }
 
-                        var uploadForm = document.getElementById('uploadProofForm');
-                        if (uploadForm) {
-                            uploadForm.addEventListener('submit', function(e){
-                                e.preventDefault();
-                                var fd = new FormData(uploadForm);
-                                fetch('training_api.php?action=upload_proof', { method: 'POST', body: fd, credentials: 'same-origin' })
-                                    .then(function(r){ return r.json(); })
-                                    .then(function(data){
-                                        var fb = document.getElementById('uploadProofFeedback');
-                                        if (data.success) {
-                                            fb.innerHTML = '<div class="alert alert-success">Proof uploaded and sent for review.</div>';
-                                            setTimeout(function(){ window.location.reload(); }, 900);
-                                        } else {
-                                            fb.innerHTML = '<div class="alert alert-danger">' + (data.error || 'Upload failed') + '</div>';
-                                        }
-                                    }).catch(function(){
-                                        var fb = document.getElementById('uploadProofFeedback');
-                                        fb.innerHTML = '<div class="alert alert-danger">Request failed</div>';
-                                    });
-                            });
-                        }
+            var uploadForm = document.getElementById('uploadProofForm');
+            if (uploadForm) {
+                uploadForm.addEventListener('submit', function(e){
+                    e.preventDefault();
+                    var fd = new FormData(uploadForm);
+                    fetch('training_api.php?action=upload_proof', { method: 'POST', body: fd, credentials: 'same-origin' })
+                        .then(function(r){ return r.json(); })
+                        .then(function(data){
+                            var fb = document.getElementById('uploadProofFeedback');
+                            if (data.success) {
+                                fb.innerHTML = '<div class="alert alert-success">Proof uploaded and sent for review.</div>';
+                                setTimeout(function(){ window.location.reload(); }, 900);
+                            } else {
+                                fb.innerHTML = '<div class="alert alert-danger">' + (data.error || 'Upload failed') + '</div>';
+                            }
+                        }).catch(function(){
+                            var fb = document.getElementById('uploadProofFeedback');
+                            fb.innerHTML = '<div class="alert alert-danger">Request failed</div>';
+                        });
+                });
+            }
 
-                        // Training records modal loader
             // Training records modal loader
             const trainingRecordsModal = document.getElementById('trainingRecordsModal');
             if (trainingRecordsModal) {
@@ -623,34 +660,36 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                                 <input type="date" name="end_date" class="form-control" required />
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Employment Status</label>
-                            <select name="employment_status" class="form-control">
-                                <option value="Probationary">Probationary</option>
-                                <option value="Permanent/Regular">Permanent/Regular</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Degree Attained</label>
-                            <select name="degree_attained" class="form-control" id="add_degree_select">
-                                <option value="Bachelors">Bachelors</option>
-                                <option value="Masters">Master's</option>
-                                <option value="Doctorate">Doctorate / PhD</option>
-                                <option value="Others">Others (specify)</option>
-                            </select>
-                            <input type="text" name="degree_other" class="form-control mt-2" placeholder="If Others, specify" style="display:none;" />
-                        </div>
+
                         <div class="mb-3">
                             <label class="form-label">Venue</label>
                             <input type="text" name="venue" class="form-control" />
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Status</label>
-                            <select name="status" class="form-control">
-                                <option value="completed">Completed</option>
-                                <option value="upcoming" selected>Upcoming</option>
-                            </select>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nature</label>
+                                <select name="nature" class="form-control">
+                                    <option value="">Select Nature</option>
+                                    <option value="Internal">Internal</option>
+                                    <option value="External">External</option>
+                                    <option value="Online">Online</option>
+                                    <option value="Workshop">Workshop</option>
+                                    <option value="Seminar">Seminar</option>
+                                    <option value="Conference">Conference</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Scope</label>
+                                <select name="scope" class="form-control">
+                                    <option value="">Select Scope</option>
+                                    <option value="Local">Local</option>
+                                    <option value="Regional">Regional</option>
+                                    <option value="National">National</option>
+                                    <option value="International">International</option>
+                                </select>
+                            </div>
                         </div>
+
                         <div id="addTrainingFeedback"></div>
                     </div>
                     <div class="modal-footer">
@@ -691,34 +730,36 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
                                 <input type="date" name="end_date" class="form-control" required />
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Employment Status</label>
-                            <select name="employment_status" class="form-control">
-                                <option value="Probationary">Probationary</option>
-                                <option value="Permanent/Regular">Permanent/Regular</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Degree Attained</label>
-                            <select name="degree_attained" class="form-control">
-                                <option value="Bachelors">Bachelors</option>
-                                <option value="Masters">Master's</option>
-                                <option value="Doctorate">Doctorate / PhD</option>
-                                <option value="Others">Others (specify)</option>
-                            </select>
-                            <input type="text" name="degree_other" class="form-control mt-2" placeholder="If Others, specify" style="display:none;" />
-                        </div>
+
                         <div class="mb-3">
                             <label class="form-label">Venue</label>
                             <input type="text" name="venue" class="form-control" />
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Status</label>
-                            <select name="status" class="form-control">
-                                <option value="completed">Completed</option>
-                                <option value="upcoming">Upcoming</option>
-                            </select>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nature</label>
+                                <select name="nature" class="form-control">
+                                    <option value="">Select Nature</option>
+                                    <option value="Internal">Internal</option>
+                                    <option value="External">External</option>
+                                    <option value="Online">Online</option>
+                                    <option value="Workshop">Workshop</option>
+                                    <option value="Seminar">Seminar</option>
+                                    <option value="Conference">Conference</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Scope</label>
+                                <select name="scope" class="form-control">
+                                    <option value="">Select Scope</option>
+                                    <option value="Local">Local</option>
+                                    <option value="Regional">Regional</option>
+                                    <option value="National">National</option>
+                                    <option value="International">International</option>
+                                </select>
+                            </div>
                         </div>
+
                         <div id="editTrainingFeedback"></div>
                     </div>
                     <div class="modal-footer">

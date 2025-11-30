@@ -184,6 +184,13 @@ ALTER TABLE `training_records`
   ADD KEY `user_id` (`user_id`);
 
 --
+-- Add nature and scope columns to training_records table
+--
+ALTER TABLE `training_records`
+  ADD COLUMN `nature` varchar(100) DEFAULT NULL,
+  ADD COLUMN `scope` varchar(100) DEFAULT NULL;
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
