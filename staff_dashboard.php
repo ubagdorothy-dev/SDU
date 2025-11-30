@@ -97,11 +97,15 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
     <link rel="stylesheet" href="staff.css">
 </head>
 <body id="body">
+<input type="checkbox" id="sidebar-toggle-checkbox" style="display: none;">
 
     <div class="sidebar">
         <div class="d-flex justify-content-between align-items-center px-3 mb-3">
-            <h3 class="m-0"><?= $_SESSION['role'] === 'head' ? 'Office Head Dashboard' : 'Staff Dashboard' ?></h3>
-            <button id="sidebar-toggle" class="btn btn-toggle"><i class="fas fa-bars"></i></button>
+            <div class="d-flex align-items-center">
+                <img src="SDU_Logo.png" alt="SDU Logo" class="sidebar-logo">
+                <h5 class="m-0 text-white"><span class="logo-text"><?= $_SESSION['role'] === 'head' ? 'SDU OFFICE HEAD' : 'SDU STAFF' ?></span></h5>
+            </div>
+            <label for="sidebar-toggle-checkbox" id="sidebar-toggle" class="btn btn-toggle"><i class="fas fa-bars"></i></label>
         </div>
         <ul class="nav flex-column">
             <li class="nav-item">
@@ -331,13 +335,46 @@ if (isset($_GET['debug']) && $_GET['debug'] === '1') {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function(){
-            var btn = document.getElementById('sidebar-toggle');
-            if (btn) {
-                btn.addEventListener('click', function(){
+            // Synchronize the hidden checkbox with the body.toggled class.
+            var sidebarCheckbox = document.getElementById('sidebar-toggle-checkbox');
+            if (sidebarCheckbox) {
+                // When checkbox changes, reflect state on body for backwards compatibility
+                sidebarCheckbox.addEventListener('change', function(){
                     var b = document.getElementById('body') || document.body;
-                    b.classList.toggle('toggled');
+                    if (sidebarCheckbox.checked) {
+                        b.classList.add('toggled');
+                        b.setAttribute('data-sidebar-collapsed', '1');
+                    } else {
+                        b.classList.remove('toggled');
+                        b.setAttribute('data-sidebar-collapsed', '0');
+                    }
+                    console.log('sidebar-toggle-checkbox change, checked=', sidebarCheckbox.checked);
+                });
+                // Initialize from current state
+                if (sidebarCheckbox.checked) {
+                    var b = document.getElementById('body') || document.body;
+                    b.classList.add('toggled');
+                    b.setAttribute('data-sidebar-collapsed', '1');
+                } else {
+                    document.getElementById('body').setAttribute('data-sidebar-collapsed', '0');
+                }
+            }
+
+            // Keep the label click behavior simple: label toggles the checkbox automatically.
+            // Remove direct click-based toggling to avoid double-toggle conflicts.
+            // Ensure clicks on the label or its icon always toggle the checkbox (cover edge cases).
+            var sidebarLabel = document.getElementById('sidebar-toggle');
+            if (sidebarLabel && sidebarCheckbox) {
+                sidebarLabel.addEventListener('click', function (e) {
+                    // toggle checkbox programmatically to avoid label quirks
+                    sidebarCheckbox.checked = !sidebarCheckbox.checked;
+                    // dispatch change event so other handlers respond
+                    var ev = new Event('change', { bubbles: true });
+                    sidebarCheckbox.dispatchEvent(ev);
+                    e.preventDefault();
                 });
             }
+
             // Static modals are rendered in the HTML (below) to avoid JS string quoting issues
 
             var editTrainingModal = document.getElementById('editTrainingModal');

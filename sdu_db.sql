@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 30, 2025 at 06:37 AM
+-- Generation Time: Nov 30, 2025 at 11:20 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -63,6 +63,26 @@ INSERT INTO `offices` (`id`, `name`, `code`) VALUES
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `staff_details`
+--
+
+CREATE TABLE `staff_details` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `position` varchar(100) DEFAULT NULL,
+  `program` varchar(255) DEFAULT NULL,
+  `job_function` varchar(255) DEFAULT NULL,
+  `office` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `employment_status` varchar(50) DEFAULT NULL,
+  `degree_attained` varchar(100) DEFAULT NULL,
+  `degree_other` text DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `training_proofs`
 --
 
@@ -91,13 +111,12 @@ CREATE TABLE `training_records` (
   `start_date` date NOT NULL,
   `end_date` date NOT NULL,
   `status` varchar(32) NOT NULL DEFAULT 'upcoming',
-  `employment_status` varchar(50) DEFAULT NULL,
-  `degree_attained` varchar(100) DEFAULT NULL,
-  `degree_other` varchar(255) DEFAULT NULL,
   `venue` varchar(255) DEFAULT NULL,
   `proof_uploaded` tinyint(1) DEFAULT 0,
   `office_code` varchar(50) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `nature` varchar(100) DEFAULT NULL,
+  `scope` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -127,7 +146,9 @@ INSERT INTO `users` (`user_id`, `full_name`, `email`, `password_hash`, `role`, `
 (3, 'Jane Doe', 'janedoe.head@sdu.edu.ph', '$2y$10$YB9IHCM9B1amu/HxYoVgAuoX7GQlGDRdFHfxyzdXfDoEqdt5AxRmG', 'staff', NULL, 1, '2025-11-30 05:31:03'),
 (4, 'Jane Doe', 'head.janedoe@sdu.edu.ph', '$2y$10$7GRd/LBv9Dfqgqa2JFs.WeavB73aVN4YEQ639sLkI6d5.l8Zs.eMm', 'head', NULL, 1, '2025-11-30 05:31:03'),
 (5, 'John Doe', 'staff.joe@sdu.edu.ph', '$2y$10$vBN8gXP15P9ZKFVgXchy3OGUjQ5e8Nx0pdRLq2w9K5/yFEz9n9I.C', 'staff', NULL, 1, '2025-11-30 05:31:03'),
-(6, 'Maria Santos', 'staff.maria@sdu.edu.ph', '$2y$10$4C.90Qy3rvW10geYYpFe4.c6F0kP9A0GnnYI1MHjvwHS5sPYE3Qn6', 'staff', 'ACCA', 1, '2025-11-30 05:31:03');
+(6, 'Maria Santos', 'staff.maria@sdu.edu.ph', '$2y$10$4C.90Qy3rvW10geYYpFe4.c6F0kP9A0GnnYI1MHjvwHS5sPYE3Qn6', 'staff', 'ACCA', 1, '2025-11-30 05:31:03'),
+(7, 'Max Verstappen', 'head.max@sdu.edu.ph', '$2y$10$Y8/hkvR/ZkxKR/17MTtuVumzBPiYUlBWTYxBE6MUNF9y6sme5DjD.', 'head', 'ACCA', 1, '2025-11-30 08:37:17'),
+(8, 'Charlie Brown', 'staff.brown@sdu.edu.ph', '$2y$10$2XD7HGkaRk932dpFwaRmquXe.P.vxLVZS1g3W7t1BGyDKzjRqb6R.', 'staff', 'ACCA', 1, '2025-11-30 10:00:22');
 
 --
 -- Indexes for dumped tables
@@ -202,7 +223,7 @@ ALTER TABLE `training_records`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- Constraints for dumped tables

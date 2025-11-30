@@ -61,6 +61,7 @@
             border: none;
             color: #ffffff;
             padding: 6px 10px;
+            cursor: pointer;
         }
         .sidebar .btn-toggle:focus { box-shadow: none; }
         .sidebar .btn-toggle:hover { background-color: transparent; }
@@ -267,4 +268,33 @@
         
         .modal-content {
             width: 100%;
+        }
+        /* Checkbox-controlled sidebar toggle (mirror admin_dashboard behavior) */
+        #sidebar-toggle-checkbox:checked ~ .sidebar { width: 80px; padding-top: 1rem; }
+        #sidebar-toggle-checkbox:checked ~ .sidebar .nav-link span,
+        #sidebar-toggle-checkbox:checked ~ .sidebar h3,
+        #sidebar-toggle-checkbox:checked ~ .sidebar .logo-text { display: none; }
+        #sidebar-toggle-checkbox:checked ~ .main-content { margin-left: 80px; }
+        #sidebar-toggle-checkbox:checked ~ .sidebar .nav-link { text-align: center; padding: 12px 0; }
+        #sidebar-toggle-checkbox:checked ~ .sidebar .d-flex.justify-content-between { padding-left: 0.25rem !important; padding-right: 0.25rem !important; margin-bottom: 1rem !important; }
+
+        /* Keep existing JS-driven toggle (body.toggled) compatible with checkbox approach */
+        @media (min-width: 992px) {
+            #sidebar-toggle-checkbox:checked ~ .sidebar .nav-link { justify-content: center; }
+        }
+        /* Logo in sidebar */
+        .sidebar-logo { height: 30px; width: auto; margin-right: 8px; }
+        .sidebar .d-flex h5 { font-weight: 700; margin-right: 0 !important; }
+        /* Disable sidebar/main transitions so expand/collapse is instant (match other dashboards) */
+        .sidebar,
+        .main-content,
+        .sidebar .nav-link,
+        .sidebar-logo,
+        .logo-text {
+            transition: none !important;
+            -webkit-transition: none !important;
+        }
+        @media (min-width: 992px) {
+            body.toggled .sidebar { transition: none !important; }
+            body.toggled .main-content { transition: none !important; }
         }

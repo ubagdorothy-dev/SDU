@@ -1,10 +1,56 @@
 <?php
 session_start();
-include("db.php");
+include("db.php"); // Include the database connection
+
+// Initialize PDO connection (db.php provides connect_db())
+$conn = connect_db();
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['unit_director', 'unit director'])) {
     header("Location: login.php");
     exit();
+}
+
+// Get current user's full name from the session for the welcome message
+// NOTE: Ensure your login script sets $_SESSION['full_name']
+$current_user_name = 'SDU Director'; // Default fallback name
+if (isset($_SESSION['full_name'])) {
+    $current_user_name = htmlspecialchars($_SESSION['full_name']);
+} else {
+    // If not set, try to fetch it from DB using user_id
+    try {
+        $stmt_name = $conn->prepare("SELECT full_name FROM users WHERE user_id = ?");
+        $stmt_name->execute([$_SESSION['user_id']]);
+        if ($row = $stmt_name->fetch(PDO::FETCH_ASSOC)) {
+            $current_user_name = htmlspecialchars($row['full_name']);
+            $_SESSION['full_name'] = $current_user_name; // Store for future requests
+        }
+    } catch (PDOException $e) {
+        error_log("Error fetching user name: " . $e->getMessage());
+    }
+}
+
+// Fetch Dashboard Statistics
+try {
+    // 1. Total Staff
+    $sql_staff = "SELECT COUNT(user_id) FROM users WHERE role = 'staff' AND is_approved = 1";
+    $stmt_staff = $conn->query($sql_staff);
+    $total_staff = $stmt_staff->fetchColumn();
+
+    // 2. Total Heads
+    $sql_heads = "SELECT COUNT(user_id) FROM users WHERE role = 'head' AND is_approved = 1";
+    $stmt_heads = $conn->query($sql_heads);
+    $total_heads = $stmt_heads->fetchColumn();
+
+    // 3. Training Completion Percentage (Simplistic Metric)
+    // NOTE: This uses an arbitrary percentage (85) as a placeholder, matching your original design. 
+    // A robust calculation would need more data (scheduled training count).
+    $training_completion_percentage = 85; 
+
+} catch (PDOException $e) {
+    $total_staff = 0;
+    $total_heads = 0;
+    $training_completion_percentage = 0;
+    error_log("Database error on dashboard stats: " . $e->getMessage());
 }
 ?>
 
@@ -14,7 +60,6 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['unit_director
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Unit Director - Dashboard</title>
-<!-- Bootstrap & Font Awesome Links -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -40,8 +85,22 @@ body {
 #sidebar-toggle-checkbox:checked ~ .sidebar-lg .logo-text,
 #sidebar-toggle-checkbox:checked ~ .sidebar-lg h5 { display: none; }
 #sidebar-toggle-checkbox:checked ~ .main-content { margin-left: 80px; }
-#sidebar-toggle-checkbox:checked ~ .sidebar-lg .nav-link { text-align: center; padding: 12px 0; }
 #sidebar-toggle-checkbox:checked ~ .sidebar-lg .d-flex.justify-content-between { padding-left: 0.25rem !important; padding-right: 0.25rem !important; margin-bottom: 1rem !important; }
+
+/* Disable sidebar/main transitions so expand/collapse is instant (match other dashboards) */
+.sidebar-lg,
+.main-content,
+.sidebar-lg .nav-link,
+.sidebar-logo,
+.logo-text {
+    transition: none !important;
+    -webkit-transition: none !important;
+}
+@media (min-width: 992px) {
+    body.toggled .sidebar-lg { transition: none !important; }
+    body.toggled .main-content { transition: none !important; }
+}
+
 
 .sidebar-lg .d-flex h5 { font-weight: 700; margin-right: 0 !important; }
 .sidebar-lg .nav-link { color: #ffffff !important; padding: 12px 20px; border-radius: 5px; margin: 5px 15px; transition: background-color 0.2s; white-space: nowrap; overflow: hidden; }
@@ -80,7 +139,6 @@ body {
 <body id="body">
 <input type="checkbox" id="sidebar-toggle-checkbox" style="display: none;">
 
-<!-- Mobile Offcanvas Menu -->
 <div class="offcanvas offcanvas-start bg-dark" tabindex="-1" id="offcanvasNavbar" aria-labelledby="offcanvasNavbarLabel">
     <div class="offcanvas-header text-white">
         <h5 class="offcanvas-title" id="offcanvasNavbarLabel">SDU Menu</h5>
@@ -96,7 +154,6 @@ body {
     </div>
 </div>
 
-<!-- Desktop Sidebar -->
 <div class="sidebar-lg d-none d-lg-block">
     <div class="d-flex justify-content-between align-items-center px-3 mb-3">
         <div class="d-flex align-items-center">
@@ -113,7 +170,6 @@ body {
     </ul>
 </div>
 
-<!-- Main Content Area -->
 <div class="main-content">
     <button class="btn btn-primary d-lg-none mb-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
         <i class="fas fa-bars"></i> Menu
@@ -122,7 +178,7 @@ body {
     <div class="header mb-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
-                <h1 class="fw-bold mb-2" style="color: #1e293b;">Welcome John Doe! </h1>
+                <h1 class="fw-bold mb-2" style="color: #1e293b;">Welcome <?php echo $current_user_name; ?>! </h1>
                 <p class="mb-0" style="color: #6b7280;">Here's what's happening with your organization today.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
@@ -134,14 +190,12 @@ body {
         </div>
     </div>
     
-    <!-- Stats Cards -->
     <div class="stats-cards">
-        <div class="card"><h3>Total Staff</h3><p>128</p></div>
-        <div class="card"><h3>Total Heads</h3><p>15</p></div>
-        <div class="card"><h3>Trainings Completed</h3><p>85%</p></div>
+        <div class="card"><h3>Total Staff</h3><p><?php echo $total_staff; ?></p></div>
+        <div class="card"><h3>Total Heads</h3><p><?php echo $total_heads; ?></p></div>
+        <div class="card"><h3>Trainings Completed</h3><p><?php echo $training_completion_percentage; ?>%</p></div>
     </div>
 
-    <!-- Charts Row -->
     <div class="row g-3 mb-4">
         <div class="col-lg-7">
             <div class="content-box chart-card">
@@ -159,19 +213,19 @@ body {
                     <div class="col-12 col-md-4">
                         <div class="card" style="padding:1rem; border-radius:12px;">
                             <h3 style="font-size:0.8rem;">Most Attended</h3>
-                            <p style="font-size:1.3rem; font-weight:800; color:#6366f1; margin:0;">Safety Training</p>
+                            <p style="font-size:1.3rem; font-weight:800; color:#6366f1; margin:0;">...</p>
                         </div>
                     </div>
                     <div class="col-12 col-md-4">
                         <div class="card" style="padding:1rem; border-radius:12px;">
                             <h3 style="font-size:0.8rem;">Least Attended</h3>
-                            <p style="font-size:1.3rem; font-weight:800; color:#10b981; margin:0;">Leadership 101</p>
+                            <p style="font-size:1.3rem; font-weight:800; color:#10b981; margin:0;">...</p>
                         </div>
                     </div>
                     <div class="col-12 col-md-4">
                         <div class="card" style="padding:1rem; border-radius:12px;">
                             <h3 style="font-size:0.8rem;">This Month</h3>
-                            <p style="font-size:1.3rem; font-weight:800; color:#f59e0b; margin:0;">12 Trainings</p>
+                            <p style="font-size:1.3rem; font-weight:800; color:#f59e0b; margin:0;">...</p>
                         </div>
                     </div>
                 </div>
@@ -183,7 +237,6 @@ body {
 
     
 
-<!-- Modals -->
 <div class="modal fade" id="broadcastModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -224,72 +277,142 @@ body {
 
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Area Chart (Total Attendance)
-    const areaCtx = document.getElementById('areaChart').getContext('2d');
-    const areaGradient = areaCtx.createLinearGradient(0, 0, 0, 220);
-    areaGradient.addColorStop(0, 'rgba(99,102,241,0.16)');
-    areaGradient.addColorStop(1, 'rgba(99,102,241,0.02)');
-
-    new Chart(areaCtx, {
-        type: 'line',
-        data: {
-            labels: ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'],
-            datasets: [{
-                label: 'Completed trainings',
-                data: [0, 0, 1, 5, 0, 0],
-                borderColor: '#1e3a8a',
-                backgroundColor: areaGradient,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: '#1e3a8a',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-            plugins: { legend: { display: false } }
-        }
-    });
-
-    // Horizontal Bar Chart (Training completion trends over 6 months)
-    const hbarCtx = document.getElementById('horizontalBarChart').getContext('2d');
-    new Chart(hbarCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'],
-            datasets: [
-                {
-                    label: 'Trainings Completed',
-                    data: [8, 12, 9, 15, 11, 14],
-                    backgroundColor: ['#7841f7ff','#7d4af5ff','#7d4decff','#7642f0ff','#8b5cf6','#7d4ceeff'],
-                    borderRadius: 6
+    
+    // Function to fetch and update chart data
+    function fetchChartData() {
+        fetch('fetch_chart_data.php')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error("Error fetching chart data:", data.error);
+                    return;
                 }
-            ]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-                x: { beginAtZero: true, ticks: { stepSize: 1 } },
-                y: { grid: { display: false } }
-            },
-            plugins: { legend: { display: false } }
-        }
-    });
-});
-</script>
-<script>
+
+                // --- Update Training Statistics Cards ---
+                const cards = document.querySelectorAll('.col-lg-5 .card p');
+                cards[0].textContent = data.training_stats.most_attended;
+                cards[1].textContent = data.training_stats.least_attended;
+                cards[2].textContent = data.training_stats.this_month_count + ' Trainings';
+
+
+                // --- Area Chart (Total Attendance) ---
+                const areaCtx = document.getElementById('areaChart').getContext('2d');
+                const areaGradient = areaCtx.createLinearGradient(0, 0, 0, 220);
+                areaGradient.addColorStop(0, 'rgba(99,102,241,0.16)');
+                areaGradient.addColorStop(1, 'rgba(99,102,241,0.02)');
+
+                new Chart(areaCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.attendance.labels,
+                        datasets: [{
+                            label: 'Completed trainings',
+                            data: data.attendance.data,
+                            borderColor: '#1e3a8a',
+                            backgroundColor: areaGradient,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#1e3a8a',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+
+                // --- Horizontal Bar Chart (Training completion trends) ---
+                const hbarCtx = document.getElementById('horizontalBarChart').getContext('2d');
+                new Chart(hbarCtx, {
+                    type: 'bar',
+                    data: {
+                        indexAxis: 'y',
+                        labels: data.training_completion.labels,
+                        datasets: [
+                            {
+                                label: 'Trainings Completed',
+                                data: data.training_completion.data,
+                                backgroundColor: ['#7841f7ff','#7d4af5ff','#7d4decff','#7642f0ff','#8b5cf6','#7d4ceeff'],
+                                borderRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            x: { beginAtZero: true, ticks: { stepSize: 1 } },
+                            y: { grid: { display: false } }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+
+            })
+            .catch(error => console.error('Error loading chart data:', error));
+    }
+
+    // Call the function to load the data and initialize charts
+    fetchChartData();
+
+
+    // --- Broadcast Modal Form Submission Logic ---
+    const broadcastForm = document.getElementById('broadcastForm');
+    const broadcastFeedback = document.getElementById('broadcastFeedback');
+
+    if (broadcastForm) {
+        broadcastForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const sendButton = this.querySelector('button[type="submit"]');
+            const originalButtonText = sendButton.innerHTML;
+
+            // Disable button and show loading state
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...';
+            broadcastFeedback.innerHTML = ''; // Clear previous feedback
+
+            fetch('send_notification.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    broadcastFeedback.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+                    broadcastForm.reset(); // Clear form on success
+                    // Optionally close the modal after a brief moment
+                    setTimeout(() => {
+                        const modalEl = document.getElementById('broadcastModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                    }, 2000);
+                } else {
+                    broadcastFeedback.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error sending notification:', error);
+                broadcastFeedback.innerHTML = `<div class="alert alert-danger">An unexpected error occurred. Please try again.</div>`;
+            })
+            .finally(() => {
+                // Re-enable button
+                sendButton.disabled = false;
+                sendButton.innerHTML = originalButtonText;
+            });
+        });
+    }
 
     // Load count initially and when modal opened
-document.addEventListener('DOMContentLoaded', function(){
     fetchInboxCount();
     var inboxModal = document.getElementById('inboxModal');
     if (inboxModal) inboxModal.addEventListener('show.bs.modal', loadInboxList);
@@ -297,4 +420,3 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 </body>
 </html>
-

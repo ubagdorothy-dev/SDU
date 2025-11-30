@@ -1,10 +1,94 @@
 <?php
 session_start();
-include("db.php");
+require_once 'db.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
+$pdo = connect_db();
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'head') {
     header("Location: login.php");
     exit();
+}
+
+// View selection
+$view = $_GET['view'] ?? 'overview';
+
+// Flash/message helper
+$message = '';
+if (!empty($_SESSION['message'])) {
+    $message = '<div class="alert alert-info">' . htmlspecialchars($_SESSION['message']) . '</div>';
+    unset($_SESSION['message']);
+}
+
+// Load current user
+$user_id = $_SESSION['user_id'];
+$stmt = $pdo->prepare("SELECT user_id, full_name, email, office_code FROM users WHERE user_id = ? LIMIT 1");
+$stmt->execute([$user_id]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+$username = $user['full_name'] ?? ($user['email'] ?? 'Office Head');
+$office = $user['office_code'] ?? null;
+
+// Head-specific metrics
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE user_id = ? AND status = 'completed'");
+$stmt->execute([$user_id]);
+$head_trainings_completed = (int)$stmt->fetchColumn();
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE user_id = ? AND status = 'upcoming'");
+$stmt->execute([$user_id]);
+$head_trainings_upcoming = (int)$stmt->fetchColumn();
+
+if ($office) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'staff' AND office_code = ?");
+    $stmt->execute([$office]);
+    $total_staff_in_office = (int)$stmt->fetchColumn();
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status = 'completed'");
+    $stmt->execute([$office]);
+    $completed_trainings_in_office = (int)$stmt->fetchColumn();
+    
+        // Minimal training status breakdown (for chart): completed, pending, overdue
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status = 'completed'");
+        $stmt->execute([$office]);
+        $training_completed = (int)$stmt->fetchColumn();
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status != 'completed' AND end_date >= CURDATE()");
+        $stmt->execute([$office]);
+        $training_pending = (int)$stmt->fetchColumn();
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM training_records WHERE office_code = ? AND status != 'completed' AND end_date < CURDATE()");
+        $stmt->execute([$office]);
+        $training_overdue = (int)$stmt->fetchColumn();
+} else {
+    $total_staff_in_office = 0;
+    $completed_trainings_in_office = 0;
+        $training_completed = 0;
+        $training_pending = 0;
+        $training_overdue = 0;
+}
+
+// Upcoming trainings for this head (for dashboard list)
+$stmt = $pdo->prepare("SELECT id, title, end_date AS completion_date FROM training_records WHERE user_id = ? AND status = 'upcoming' ORDER BY end_date ASC LIMIT 10");
+$stmt->execute([$user_id]);
+$result_head_upcoming_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Recent activity (head)
+$stmt = $pdo->prepare("SELECT id, title, end_date AS completion_date, created_at, status FROM training_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 6");
+$stmt->execute([$user_id]);
+$result_head_activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Training records (for training-records view)
+$result_records = [];
+if ($view === 'training-records') {
+    $stmt = $pdo->prepare("SELECT id, title, description, end_date AS completion_date, status FROM training_records WHERE user_id = ? ORDER BY created_at DESC");
+    $stmt->execute([$user_id]);
+    $result_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Office directory rows (for office-directory view)
+$office_staff_rows = [];
+if ($view === 'office-directory' && !empty($office)) {
+    $stmt = $pdo->prepare("SELECT u.user_id AS id, u.full_name AS username, u.email, s.position, s.program, s.job_function FROM users u LEFT JOIN staff_details s ON u.user_id = s.user_id WHERE u.role = 'staff' AND u.office_code = ? ORDER BY u.full_name");
+    $stmt->execute([$office]);
+    $office_staff_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ?>
@@ -23,6 +107,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
             display: flex;
             background-color: #f0f2f5;
         }
+
         .main-content {
             flex-grow: 1;
             padding: 2rem;
@@ -73,7 +158,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
             body.toggled .sidebar .nav-link { text-align: center; padding: 12px 0; }
             body.toggled .sidebar .nav-link i { margin-right: 0; }
             body.toggled .sidebar .nav-link span { display: none; }
+            /* Hide header logo text when collapsed and tighten logo spacing */
+            body.toggled .sidebar .logo-text { display: none; }
             body.toggled .sidebar h3 { display: none; }
+            body.toggled .sidebar .sidebar-logo { margin-right: 0; }
         }
         .header h1 { 
             font-size: 2rem; 
@@ -257,15 +345,43 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                 font-size: 1.25rem;
             }
         }
+        .sidebar-logo { height: 30px; width: auto; margin-right: 8px; }
+        /* Make text and icon changes instantaneous so labels "pop" when opening */
+        .sidebar .nav-link span,
+        .sidebar .logo-text,
+        .sidebar .nav-link i {
+            transition: none !important;
+            -webkit-transition: none !important;
+        }
+
+        /* Disable width/margin/padding transitions so expand/collapse is instant */
+        .sidebar,
+        .main-content,
+        .sidebar .nav-link,
+        .sidebar .nav-link i,
+        .sidebar .nav-link span {
+            transition: none !important;
+            -webkit-transition: none !important;
+        }
+
+        /* Also override media-specific toggled transitions */
+        @media (min-width: 992px) {
+            body.toggled .sidebar { transition: none !important; }
+            body.toggled .main-content { transition: none !important; }
+        }
     </style>
     </head>
 <body id="body">
+<input type="checkbox" id="sidebar-toggle-checkbox" style="display:none;">
 
     <div class="sidebar">
         <div class="d-flex justify-content-between align-items-center px-3 mb-3">
-            <h3 class="m-0">Office Head Dashboard</h3>
-            <button id="sidebar-toggle" class="btn btn-toggle"><i class="fas fa-bars"></i></button>
+             <img src="SDU_Logo.png" alt="SDU Logo" class="sidebar-logo">
+            <h5 class="m-0 text-white"><span class="logo-text"><?= $_SESSION['role'] === 'head' ? 'SDU OFFICE HEAD' : 'SDU STAFF' ?></span></h5>
+
+            <label for="sidebar-toggle-checkbox" id="sidebar-toggle" class="btn btn-toggle"><i class="fas fa-bars"></i></label>
         </div>
+        
         <ul class="nav flex-column">
             <li class="nav-item">
                 <a class="nav-link <?= $view === 'overview' ? 'active' : '' ?>" href="?view=overview">
@@ -347,26 +463,26 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                         <canvas id="headAttendanceChart" height="160"></canvas>
                     </div>
                 </div>
-                <div class="col-xl-3">
+                <div class="col-xl-6">
                     <div class="content-box h-100">
-                        <h2 class="mb-3">Participation</h2>
-                        <canvas id="headParticipationChart" height="220"></canvas>
-                        <p class="text-center text-muted small mt-3">Active vs total staff</p>
-                    </div>
-                </div>
-                <div class="col-xl-3">
-                    <div class="content-box h-100">
-                        <h2 class="mb-3">Staff per Office</h2>
-                        <canvas id="staffPerOfficeChart" height="220"></canvas>
-                        <p class="text-center text-muted small mt-3">Organization-wide snapshot</p>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h2 class="mb-1">Training Status Breakdown</h2>
+                                <p class="text-muted small mb-0">Completed / Pending / Overdue</p>
+                            </div>
+                            <div id="trainingStatusSummary" class="text-end small text-muted" style="min-width:120px">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                        <canvas id="trainingStatusChart" height="160"></canvas>
                     </div>
                 </div>
             </div>
-            <?php if ($result_head_upcoming_list && $result_head_upcoming_list->num_rows > 0): ?>
+            <?php if (!empty($result_head_upcoming_list)): ?>
             <div class="content-box mt-4">
                 <h2>My Upcoming Trainings</h2>
                 <div class="list-group">
-                    <?php while ($upcoming = $result_head_upcoming_list->fetch_assoc()): ?>
+                    <?php foreach ($result_head_upcoming_list as $upcoming): ?>
                         <div class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-1"><?php echo htmlspecialchars($upcoming['title']); ?></h6>
@@ -374,16 +490,16 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                             </div>
                             <span class="badge bg-warning rounded-pill">Upcoming</span>
                         </div>
-                    <?php endwhile; ?>
+                    <?php endforeach; ?>
                 </div>
             </div>
             <?php endif; ?>
 
             <div class="content-box mt-4">
                 <h2>My Recent Activity</h2>
-            <?php if ($result_head_activities && $result_head_activities->num_rows > 0): ?>
+            <?php if (!empty($result_head_activities)): ?>
                     <div class="list-group">
-                        <?php while ($activity = $result_head_activities->fetch_assoc()): ?>
+                        <?php foreach ($result_head_activities as $activity): ?>
                             <div class="list-group-item d-flex justify-content-between align-items-center">
                                 <div>
                                     <h6 class="mb-1"><?php echo htmlspecialchars($activity['title']); ?></h6>
@@ -399,7 +515,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                                     <?php echo ucfirst($activity['status']); ?>
                                 </span>
                             </div>
-                        <?php endwhile; ?>
+                        <?php endforeach; ?>
                     </div>
                 <?php else: ?>
                     <div class="text-center py-4">
@@ -422,7 +538,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                     </button>
                 </div>
                 <?php echo $message; ?>
-                <?php if ($result_records && $result_records->num_rows > 0): ?>
+                <?php if (!empty($result_records)): ?>
                     <table class="table table-striped mt-4">
                         <thead>
                             <tr>
@@ -434,7 +550,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php while ($row = $result_records->fetch_assoc()): ?>
+                            <?php foreach ($result_records as $row): ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($row['title']); ?></td>
                                     <td><?php echo htmlspecialchars($row['description']); ?></td>
@@ -472,7 +588,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                                         </div>
                                     </td>
                                 </tr>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </tbody>
                     </table>
                 <?php else: ?>
@@ -486,16 +602,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h2>Office Staff Directory</h2>
                 </div>
-                <?php
-                if (!empty($office)) {
-                    $stmt = $conn->prepare("SELECT u.id, u.username, u.email, s.position, s.program, s.job_function FROM users u LEFT JOIN staff_details s ON u.id = s.user_id WHERE u.role = 'staff' AND s.office = ? ORDER BY u.username");
-                    $stmt->bind_param("s", $office);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
-                } else {
-                    $result = false;
-                }
-                ?>
+                <?php // $office_staff_rows prepared earlier using PDO; use that for listing ?>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover">
                         <thead>
@@ -509,8 +616,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                             </tr>
                         </thead>
                         <tbody>
-                        <?php if ($result && $result->num_rows > 0): ?>
-                            <?php while ($row = $result->fetch_assoc()): ?>
+                        <?php if (!empty($office_staff_rows)): ?>
+                            <?php foreach ($office_staff_rows as $row): ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($row['username']); ?></td>
                                     <td><?php echo htmlspecialchars($row['email']); ?></td>
@@ -523,7 +630,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
                                         </button>
                                     </td>
                                 </tr>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
                                 <td colspan="6" class="text-center">No staff found or office not set.</td>
@@ -540,11 +647,16 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function(){
-            const toggleBtn = document.getElementById('sidebar-toggle');
-            if (toggleBtn) {
-                toggleBtn.addEventListener('click', function(){
-                    (document.getElementById('body') || document.body).classList.toggle('toggled');
+            const sidebarCheckbox = document.getElementById('sidebar-toggle-checkbox');
+            const toggleLabel = document.getElementById('sidebar-toggle');
+            if (sidebarCheckbox) {
+                // initialize checkbox from current body state
+                sidebarCheckbox.checked = (document.body.classList.contains('toggled'));
+                sidebarCheckbox.addEventListener('change', function(){
+                    if (sidebarCheckbox.checked) document.body.classList.add('toggled');
+                    else document.body.classList.remove('toggled');
                 });
+                if (toggleLabel) toggleLabel.style.cursor = 'pointer';
             }
 
             if (document.getElementById('headAttendanceChart')) {
@@ -555,28 +667,45 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
             initAddTrainingForm();
         });
 
-        let headAttendanceChart, headParticipationChart, staffPerOfficeChart;
+        let headAttendanceChart;
 
         function initHeadCharts() {
             fetch('dashboard_metrics_api.php?scope=head', { credentials: 'same-origin' })
-                .then(r => r.json())
-                .then(resp => {
-                    if (!resp.success) throw new Error('Failed to load metrics');
-                    renderHeadAttendance(resp.data.attendance);
-                    renderHeadParticipation(resp.data.participation);
-                    renderStaffPerOffice(resp.data.staffPerOffice);
-                })
-                .catch(() => {
-                    ['headAttendanceChart','headParticipationChart','staffPerOfficeChart'].forEach(id => {
-                        const canvas = document.getElementById(id);
-                        if (!canvas) return;
-                        const ctx = canvas.getContext('2d');
-                        ctx.font = '14px Inter';
-                        ctx.fillStyle = '#cbd5f5';
-                        ctx.textAlign = 'center';
-                        ctx.fillText('No data available', canvas.width / 2, canvas.height / 2);
+                    .then(r => r.json())
+                    .then(resp => {
+                        console.log('dashboard_metrics_api response', resp);
+                        if (!resp.success) throw new Error('Failed to load metrics');
+                        renderHeadAttendance(resp.data.attendance);
+                        renderHeadParticipation(resp.data.participation);
+                        // prefer structured trainingStatus data when available
+                        if (resp.data && resp.data.trainingStatus) {
+                            renderTrainingStatus(resp.data.trainingStatus);
+                        } else if (resp.data && resp.data.staffPerOffice) {
+                            renderStaffPerOffice(resp.data.staffPerOffice);
+                        } else {
+                            // show placeholder in trainingStatusChart when no structured data
+                            const t = document.getElementById('trainingStatusChart');
+                            if (t) {
+                                const c = t.getContext('2d');
+                                c.font = '14px Inter';
+                                c.fillStyle = '#cbd5f5';
+                                c.textAlign = 'center';
+                                c.fillText('No training status data available', t.width / 2, t.height / 2);
+                            }
+                        }
+                    })
+                    .catch((err) => {
+                        console.error('Failed to load dashboard metrics', err);
+                        ['headAttendanceChart','headParticipationChart','staffPerOfficeChart','trainingStatusChart'].forEach(id => {
+                            const canvas = document.getElementById(id);
+                            if (!canvas) return;
+                            const ctx = canvas.getContext('2d');
+                            ctx.font = '14px Inter';
+                            ctx.fillStyle = '#cbd5f5';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('No data available', canvas.width / 2, canvas.height / 2);
+                        });
                     });
-                });
         }
 
         function renderHeadAttendance(dataset) {
@@ -603,59 +732,52 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
             });
         }
 
-        function renderHeadParticipation(data) {
-            const ctx = document.getElementById('headParticipationChart');
+        // Render training status breakdown (horizontal bar)
+        let trainingStatusChart;
+        function renderTrainingStatus(data) {
+            const ctx = document.getElementById('trainingStatusChart');
             if (!ctx) return;
-            if (headParticipationChart) headParticipationChart.destroy();
-            const inactive = Math.max((data.total || 0) - (data.active || 0), 0);
-            headParticipationChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Active', 'Not active'],
-                    datasets: [{
-                        data: [data.active || 0, inactive],
-                        backgroundColor: ['#22c55e', '#e2e8f0'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    cutout: '68%',
-                    plugins: { legend: { position: 'bottom' } }
-                }
-            });
-        }
-
-        function renderStaffPerOffice(list) {
-            const ctx = document.getElementById('staffPerOfficeChart');
-            if (!ctx) return;
-            if (staffPerOfficeChart) staffPerOfficeChart.destroy();
-            const limited = Array.isArray(list) ? list.slice(0, 6) : [];
-            if (!limited.length) {
-                const c = ctx.getContext('2d');
-                c.font = '14px Inter';
-                c.fillStyle = '#cbd5f5';
-                c.textAlign = 'center';
-                c.fillText('No staffing data available', ctx.width / 2, ctx.height / 2);
-                return;
-            }
-            staffPerOfficeChart = new Chart(ctx, {
+            const values = [data.completed || 0, data.pending || 0, data.overdue || 0];
+            const labels = ['Completed', 'Pending', 'Overdue'];
+            if (trainingStatusChart) trainingStatusChart.destroy();
+            trainingStatusChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: limited.map(item => item.office),
+                    labels: labels,
                     datasets: [{
-                        label: 'Staff count',
-                        data: limited.map(item => item.total),
-                        backgroundColor: '#f97316'
+                        label: 'Count',
+                        data: values,
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444']
                     }]
                 },
                 options: {
                     indexAxis: 'y',
                     plugins: { legend: { display: false } },
-                    scales: {
-                        x: { beginAtZero: true, ticks: { precision: 0 } }
-                    }
+                    scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
                 }
             });
+
+            // Update summary text
+            const total = (values[0] + values[1] + values[2]) || 0;
+            const overduePct = total ? Math.round((values[2] / total) * 1000) / 10 : 0;
+            const summary = document.getElementById('trainingStatusSummary');
+            if (summary) {
+                summary.innerHTML = '<div><strong>' + (values[0] || 0) + '</strong> completed</div>' +
+                                    '<div><strong>' + (values[1] || 0) + '</strong> pending</div>' +
+                                    '<div><strong>' + overduePct + '%</strong> overdue</div>';
+            }
+        }
+
+        // Inline server-side data injection for training status (minimal, avoids extra API)
+        const trainingStatusData = {
+            completed: <?php echo (int)($training_completed ?? 0); ?>,
+            pending: <?php echo (int)($training_pending ?? 0); ?>,
+            overdue: <?php echo (int)($training_overdue ?? 0); ?>
+        };
+
+        // Render injected data so chart is visible even without an external API
+        if (document.getElementById('trainingStatusChart')) {
+            try { renderTrainingStatus(trainingStatusData); } catch (e) { console.error('Render training status failed', e); }
         }
 
         function initHeadBroadcastForm() {
@@ -905,7 +1027,12 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'head') {
         </div>
     </div>
 
-    <?php include 'profile_modal.php'; ?>
+    <?php
+    $profileModal = __DIR__ . DIRECTORY_SEPARATOR . 'profile_modal.php';
+    if (is_file($profileModal)) {
+        include $profileModal;
+    }
+    ?>
 
     <script>
         // Initialize profile modal

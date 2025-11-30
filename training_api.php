@@ -35,10 +35,12 @@ try {
         $description = trim($_POST['description'] ?? '');
         $start_date = $_POST['start_date'] ?? null;
         $end_date = $_POST['end_date'] ?? null;
+        $completion_date = $_POST['completion_date'] ?? null;
+        if ((!$start_date || !$end_date) && $completion_date) {
+            $start_date = $completion_date;
+            $end_date = $completion_date;
+        }
         $status = $_POST['status'] ?? 'upcoming';
-        $employment_status = $_POST['employment_status'] ?? null;
-        $degree_attained = $_POST['degree_attained'] ?? null;
-        $degree_other = $_POST['degree_other'] ?? null;
         $venue = $_POST['venue'] ?? null;
 
         if (!$title || !$start_date || !$end_date) {
@@ -51,8 +53,8 @@ try {
         $office = $stmt->fetch(PDO::FETCH_ASSOC);
         $office_code = $office['office_code'] ?? null;
 
-        $ins = $pdo->prepare("INSERT INTO training_records (user_id, title, description, start_date, end_date, status, employment_status, degree_attained, degree_other, venue, office_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $ins->execute([$user_id, $title, $description, $start_date, $end_date, $status, $employment_status, $degree_attained, $degree_other, $venue, $office_code]);
+        $ins = $pdo->prepare("INSERT INTO training_records (user_id, title, description, start_date, end_date, status, venue, office_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $ins->execute([$user_id, $title, $description, $start_date, $end_date, $status, $venue, $office_code]);
 
         echo json_encode(['success' => true, 'id' => $pdo->lastInsertId()]);
         exit();
@@ -65,14 +67,24 @@ try {
         $description = trim($_POST['description'] ?? '');
         $start_date = $_POST['start_date'] ?? null;
         $end_date = $_POST['end_date'] ?? null;
+        $completion_date = $_POST['completion_date'] ?? null;
+        if ((!$start_date || !$end_date) && $completion_date) {
+            $start_date = $completion_date;
+            $end_date = $completion_date;
+        }
         $status = $_POST['status'] ?? 'upcoming';
-        $employment_status = $_POST['employment_status'] ?? null;
-        $degree_attained = $_POST['degree_attained'] ?? null;
-        $degree_other = $_POST['degree_other'] ?? null;
         $venue = $_POST['venue'] ?? null;
+        if ($venue === null) {
+            $cur = $pdo->prepare("SELECT venue FROM training_records WHERE id = ? AND user_id = ?");
+            $cur->execute([$id, $user_id]);
+            $row = $cur->fetch(PDO::FETCH_ASSOC);
+            if ($row && array_key_exists('venue', $row)) {
+                $venue = $row['venue'];
+            }
+        }
 
-        $upd = $pdo->prepare("UPDATE training_records SET title = ?, description = ?, start_date = ?, end_date = ?, status = ?, employment_status = ?, degree_attained = ?, degree_other = ?, venue = ? WHERE id = ? AND user_id = ?");
-        $upd->execute([$title, $description, $start_date, $end_date, $status, $employment_status, $degree_attained, $degree_other, $venue, $id, $user_id]);
+        $upd = $pdo->prepare("UPDATE training_records SET title = ?, description = ?, start_date = ?, end_date = ?, status = ?, venue = ? WHERE id = ? AND user_id = ?");
+        $upd->execute([$title, $description, $start_date, $end_date, $status, $venue, $id, $user_id]);
 
         echo json_encode(['success' => true]);
         exit();
