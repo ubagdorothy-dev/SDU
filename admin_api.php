@@ -69,6 +69,68 @@ try {
         exit();
     }
     
+    if ($action === 'get_office_stats') {
+        // Get office-wise statistics
+        $stats = [];
+        
+        // Get all offices
+        $stmt = $pdo->prepare("SELECT code, name FROM offices");
+        $stmt->execute();
+        $offices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // If no offices found, return empty stats
+        if (empty($offices)) {
+            echo json_encode([
+                'success' => true,
+                'stats' => []
+            ]);
+            exit();
+        }
+        
+        foreach ($offices as $office) {
+            // Get total staff in office
+            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM users WHERE COALESCE(office_code, '') = COALESCE(?, '') AND role IN ('staff', 'head')");
+            $stmt->execute([$office['code']]);
+            $total_staff = $stmt->fetchColumn();
+            
+            // Get completed trainings for office
+            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM training_records tr JOIN users u ON tr.user_id = u.user_id WHERE COALESCE(u.office_code, '') = COALESCE(?, '') AND tr.status = 'completed'");
+            $stmt->execute([$office['code']]);
+            $completed_trainings = $stmt->fetchColumn();
+            
+            $stats[] = [
+                'office_name' => $office['name'],
+                'office_code' => $office['code'],
+                'total_staff' => $total_staff,
+                'completed_trainings' => $completed_trainings
+            ];
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'stats' => $stats
+        ]);
+        exit();
+    }
+    
+    if ($action === 'get_recent_trainings') {
+        // Get recent training completions with user details
+        $stmt = $pdo->prepare("SELECT tr.title, tr.created_at as completion_date, u.full_name, COALESCE(u.office_code, 'Unassigned') as office_code FROM training_records tr JOIN users u ON tr.user_id = u.user_id WHERE tr.status = 'completed' ORDER BY tr.created_at DESC LIMIT 10");
+        $stmt->execute();
+        $trainings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Format dates
+        foreach ($trainings as &$training) {
+            $training['completion_date'] = date('M j, Y', strtotime($training['completion_date']));
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'trainings' => $trainings
+        ]);
+        exit();
+    }
+    
     if ($action === 'get_notifications') {
         // Get recent notifications for admin
         $stmt = $pdo->prepare("SELECT id, title, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");

@@ -72,7 +72,6 @@ CREATE TABLE `staff_details` (
   `position` varchar(100) DEFAULT NULL,
   `program` varchar(255) DEFAULT NULL,
   `job_function` varchar(255) DEFAULT NULL,
-  `office` varchar(50) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `employment_status` varchar(50) DEFAULT NULL,

@@ -4,6 +4,11 @@ require_once 'db.php';
 
 $pdo = connect_db();
 
+// Fetch pending approvals count
+$pending_sql = "SELECT COUNT(user_id) FROM users WHERE is_approved = 0 AND role IN ('staff', 'head')";
+$pending_stmt = $pdo->query($pending_sql);
+$pending_approvals = $pending_stmt->fetchColumn();
+
 // Check if user is logged in and is a unit director (accept common role variants)
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['unit_director', 'unit director'])) {
     header("Location: login.php");
@@ -127,7 +132,7 @@ body {
             <li class="nav-item"><a class="nav-link" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#inboxModal"><i class="fas fa-inbox me-2"></i> <span>Inbox</span> <span id="inboxCount" class="badge bg-danger ms-2" style="font-size:10px;">0</span></a></li>
             <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
-            <li class="nav-item"><a class="nav-link active" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals</span></a></li>
+            <li class="nav-item"><a class="nav-link active" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals <span class="badge bg-danger"><?php echo $pending_approvals; ?></span></span></a></li>
             <li class="nav-item"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
         </ul>
     </div>
@@ -145,7 +150,7 @@ body {
     <ul class="nav flex-column">
         <li class="nav-item"><a class="nav-link" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i> <span>Dashboard</span></a></li>
         <li class="nav-item"><a class="nav-link" href="directory_reports.php"><i class="fas fa-users me-2"></i> <span>Directory & Reports</span></a></li>
-        <li class="nav-item"><a class="nav-link active" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals</span></a></li>
+        <li class="nav-item"><a class="nav-link active" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span>Pending Approvals <span class="badge bg-danger"><?php echo $pending_approvals; ?></span></span></a></li>
         <li class="nav-item mt-auto"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span>Logout</span></a></li>
     </ul>
 </div>

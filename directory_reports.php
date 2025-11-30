@@ -10,6 +10,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'unit director
 // Connect to DB
 $pdo = connect_db();
 
+// Fetch pending approvals count
+$pending_sql = "SELECT COUNT(user_id) FROM users WHERE is_approved = 0 AND role IN ('staff', 'head')";
+$pending_stmt = $pdo->query($pending_sql);
+$pending_approvals = $pending_stmt->fetchColumn();
+
 // Filters from GET
 $filter_office = $_GET['office'] ?? 'all';
 $filter_role = $_GET['role'] ?? 'all';
@@ -147,6 +152,7 @@ body { font-family: 'Montserrat', sans-serif; }
     <ul class="navbar-nav">
       <li class="nav-item"><a class="nav-link" href="admin_dashboard.php"><i class="fas fa-chart-line me-2"></i>Dashboard</a></li>
       <li class="nav-item"><a class="nav-link active" href="directory_reports.php"><i class="fas fa-users me-2"></i>Directory & Reports</a></li>
+      <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i>Pending Approvals <span class="badge bg-danger"><?php echo $pending_approvals; ?></span></a></li>
       <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#profileModal"><i class="fas fa-user-circle me-2"></i>Profile</a></li>
       <li class="nav-item"><a class="nav-link" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
     </ul>
@@ -165,7 +171,7 @@ body { font-family: 'Montserrat', sans-serif; }
   <ul class="nav flex-column">
     <li class="nav-item"><a class="nav-link" href="admin_dashboard.php" ><i class="fas fa-chart-line me-2"></i><span> Dashboard</span></a></li>
     <li class="nav-item"><a class="nav-link active" href="directory_reports.php" ><i class="fas fa-users me-2"></i><span> Directory & Reports</span></a></li>
-    <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span> Pending Approvals</span></a></li>
+    <li class="nav-item"><a class="nav-link" href="pending_approvals.php"><i class="fas fa-clipboard-check me-2"></i> <span> Pending Approvals <span class="badge bg-danger"><?php echo $pending_approvals; ?></span></span></a></li>
     <li class="nav-item mt-auto"><a class="nav-link" href="logout.php" ><i class="fas fa-sign-out-alt me-2"></i><span> Logout</span></a></li>
   </ul>
 </div>

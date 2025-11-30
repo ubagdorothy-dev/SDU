@@ -46,7 +46,7 @@ try {
     $notification_title = "Proof of Completion Uploaded";
     
     // Notify unit directors (role 'unit director')
-    $nd = $pdo->prepare("SELECT user_id FROM users WHERE role IN ('unit_director', 'unit director')");
+    $nd = $pdo->prepare("SELECT user_id FROM users WHERE role = 'unit director'");
     $nd->execute();
     $unitDirectors = $nd->fetchAll(PDO::FETCH_COLUMN);
     
